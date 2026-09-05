@@ -85,6 +85,10 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 stopSelf()
                 return START_NOT_STICKY
             }
+            ACTION_TOGGLE_BYPASS -> {
+                setBypassed(!engine.bypassed)
+                return START_STICKY
+            }
             ACTION_SET_PROJECTION -> {
                 promoteForeground(withProjection = true, withMicrophone = false)
                 adoptProjection(intent)
@@ -127,6 +131,21 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             publishStatus()
             updateNotification()
         }
+    }
+
+    /**
+     * The A/B switch.
+     *
+     * The engine fades its gain to unity first; only once that fade has landed
+     * is the effect itself switched out, so the comparison covers the compressor
+     * and the limiter too without a click on the way there.
+     */
+    private fun setBypassed(bypassed: Boolean) {
+        engine.bypassed = bypassed
+        StabilizerStatusBus.update { it.copy(bypassed = bypassed) }
+        handler?.postDelayed({ processor?.setBypassed(bypassed) }, BYPASS_SETTLE_MS)
+        if (!bypassed) processor?.setBypassed(false)
+        updateNotification()
     }
 
     private fun attachProcessor() {
@@ -361,12 +380,25 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 getString(R.string.meter_gain_format, engine.state.gainDb),
             )
         }
+        // One button to answer "is this doing anything?" without opening the app.
+        val bypassed = engine.bypassed
+        val toggle = PendingIntent.getService(
+            this,
+            1,
+            Intent(this, StabilizerService::class.java).setAction(ACTION_TOGGLE_BYPASS),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val toggleLabel = getString(if (bypassed) R.string.action_resume else R.string.action_bypass)
+
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.notification_title))
+            .setContentTitle(
+                getString(if (bypassed) R.string.notification_title_bypassed else R.string.notification_title),
+            )
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(open)
             .setOngoing(true)
+            .addAction(Notification.Action.Builder(null, toggleLabel, toggle).build())
             .build()
     }
 
@@ -425,9 +457,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         private const val STATUS_INTERVAL_MS = 100L
         private const val NOTIFICATION_INTERVAL_MS = 5_000L
 
+        /** Long enough for the engine's 250 ms unity fade to land. */
+        private const val BYPASS_SETTLE_MS = 320L
+
         const val ACTION_START = "dev.autotune.tv.action.START"
         const val ACTION_STOP = "dev.autotune.tv.action.STOP"
         const val ACTION_SET_PROJECTION = "dev.autotune.tv.action.SET_PROJECTION"
+        const val ACTION_TOGGLE_BYPASS = "dev.autotune.tv.action.TOGGLE_BYPASS"
         const val EXTRA_USER_INITIATED = "userInitiated"
         const val EXTRA_RESULT_CODE = "resultCode"
         const val EXTRA_RESULT_DATA = "resultData"

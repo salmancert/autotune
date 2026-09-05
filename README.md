@@ -30,7 +30,7 @@ to *listen to*, and that limit differs per app.
 
 ## What it actually does
 
-Three things, in order of how much they matter.
+Four things, in order of how much they matter.
 
 **1. It knows what it is listening to.** A small neural network labels every 32 ms
 of audio as dialogue, music, or effects. Instantaneous spectra cannot do this — a
@@ -49,6 +49,17 @@ caught immediately, and a slow release so it does not pump.
 allowed more than 2 dB above the dialogue target. A misclassified stinger still
 gets neutralised; the model decides how *gracefully* a loud passage is handled, not
 *whether* it is handled.
+
+**4. It notices what refuses to get quieter.** The three rules above all react to
+*level*. None of them catches an advert break that sits exactly at the ceiling,
+brick-walled, for ninety seconds — loud in a way that is fatiguing rather than
+startling. A fourth term builds extra attenuation while loudness stays above the
+ceiling *and* the content has no dynamics left, and releases the moment either
+stops being true. Both conditions are needed: loud alone would punish a dramatic
+climax that is meant to be loud. Measured across the corpus, clean dialogue varies
+by about 24 dB inside a two-second window, a film score by 2 dB, and brick-walled
+advertising audio by under half a dB — which is what makes the second condition a
+usable signal rather than a guess.
 
 There is one more piece of judgement in there worth calling out. The obvious way to
 measure "how loud is the dialogue" is the standard 3-second short-term loudness —
@@ -70,6 +81,54 @@ and runs the whole chain over it:
 
 Dialogue came up 9.7 dB, music came down 9.0 dB. Both directions matter: turning
 everything down would have "fixed" the gap without making the dialogue audible.
+
+## Presets
+
+The three sliders are a fine way to express *how* the stabiliser should behave and
+a poor way to ask someone sitting on a sofa. One button on the remote says the same
+thing, and the genres genuinely differ:
+
+| Preset | For | What changes |
+|---|---|---|
+| **Films & drama** | Wide cinematic mixes | Music held 5 dB under dialogue, up to 12 dB of lift |
+| **Sport** | Commentary over a crowd | Crowd ducked less (it is atmosphere), faster recovery, harder on ad breaks |
+| **Late night** | Not waking the house | Music 8 dB under, nothing above target, up to 15 dB of lift |
+| **News & talk** | Already-levelled broadcast | A light touch, consonants pushed forward |
+| **Custom** | Your own settings | Nothing — the sliders rule |
+
+A preset decides how hard to work, not how loud you like your television: your
+dialogue level and correction strength survive it untouched. Adjusting a value a
+preset owns switches you to Custom rather than leaving a slider on screen that
+visibly does nothing.
+
+Per-app profiles compose *on top* as relative nudges — Netflix leans the ceiling
+1 dB further down, YouTube 1 dB back — so choosing a preset still means something
+whatever app is playing. (They used to set absolute values, which silently
+overruled the preset; a test caught it.)
+
+## Hearing what it is doing
+
+**Compare with it off**, on the status screen and as a button on the ongoing
+notification, is the fastest answer to "is this actually doing anything?". It fades
+the gain to unity over 250 ms, then switches the compressor and limiter out too, so
+the comparison covers the whole chain rather than flattering it. Press it again to
+bring everything back.
+
+## Prior art
+
+Someone pointed me at [Auto Volume Control for TV](https://play.google.com/store/apps/details?id=purpose.company.smartvolumestabilizer)
+(`purpose.company.smartvolumestabilizer`) as an app in this space. The Play listing
+itself was not reachable from where this was built, so what follows is second-hand,
+from a search index, and paraphrased rather than quoted: it describes real-time
+stabilisation across the major streaming apps, preventing spikes during action
+scenes, commercials and sport, boosting quiet dialogue, and offering preset modes
+along the lines of Movies, Sports, Late Night, News and Custom.
+
+Two ideas were worth taking, and both are implemented above: **named genre presets**
+instead of raw sliders, and treating **loud commercials** as a problem distinct from
+loud moments. The bypass A/B and the relative per-app profiles are not from there —
+those came from wanting the app to be checkable and its presets to survive contact
+with a per-app profile. No code was copied; nothing above was reverse-engineered.
 
 ## Platform reality
 
@@ -144,17 +203,19 @@ Everything is on the main screen; left/right on the remote adjusts a value.
   sounds flattened.
 - **Correction strength** (default 80%) — the master amount. Lower it if the sound
   feels squashed or you can hear the levelling working.
-- **Night mode** — tighter ceiling, more boost, faster recovery. For watching
-  without waking the house.
+- **Watching** — the preset (see [Presets](#presets)). The one control most people
+  will ever touch.
+- **Compare with it off** — fades the whole chain out so you can hear the
+  difference, and back in when you press it again.
 - **Use microphone as fallback** — off by default. Turn it on if you mostly watch
   apps that block capture and your device has a microphone. Autotune subtracts its
   own applied gain back out of what the mic hears, so the loop does not chase
   itself, but the room still colours the measurement.
 
-Per-app profiles adjust these automatically: films on Netflix/Prime get the most
-correction (widest native range), YouTube the least (already loudness-normalised
-upstream), local files in VLC/Kodi/Plex the most aggressive settings (untouched
-masters).
+Per-app profiles nudge these automatically on top of the preset: films on
+Netflix/Prime get a little more correction (widest native range), YouTube a little
+less (already loudness-normalised upstream), local files in VLC/Kodi/Plex the most
+(untouched masters).
 
 ## The model
 

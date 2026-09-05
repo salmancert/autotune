@@ -61,6 +61,11 @@ class DynamicsProcessorEffect private constructor(
         }.onFailure { Log.w(TAG, "could not apply static preset", it) }
     }
 
+    override fun setBypassed(bypassed: Boolean) {
+        runCatching { effect.enabled = !bypassed }
+            .onFailure { Log.w(TAG, "could not toggle the effect", it) }
+    }
+
     override fun close() {
         runCatching { effect.enabled = false }
         runCatching { effect.release() }

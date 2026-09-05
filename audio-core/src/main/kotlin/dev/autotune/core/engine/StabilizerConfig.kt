@@ -49,8 +49,25 @@ data class StabilizerConfig(
     /** 0 = bypass, 1 = full correction. The single "how much" knob in the UI. */
     val strength: Float = 1f,
 
-    /** Night mode trades dynamics for consistency: tighter ceiling, stronger boost. */
-    val nightMode: Boolean = false,
+    /** What is being watched. Presets set the values below; [ListeningPreset.CUSTOM] does not. */
+    val preset: ListeningPreset = ListeningPreset.DEFAULT,
+
+    /**
+     * Extra attenuation for content that simply refuses to get quieter.
+     *
+     * The ceiling catches a peak. It does not catch an advert break that sits
+     * exactly at the ceiling, brick-walled, for ninety seconds - which is
+     * fatiguing in a way a loud moment is not. This trim builds while loudness
+     * stays above the ceiling *and* the content has no dynamics left, and
+     * releases as soon as either stops being true.
+     */
+    val sustainedTrimDb: Float = 6f,
+
+    /** Grace period before the sustained trim starts to build. */
+    val sustainedOnsetSeconds: Float = 4f,
+
+    /** Time above the ceiling at which the sustained trim reaches its full depth. */
+    val sustainedFullSeconds: Float = 20f,
 
     /** Compression ratio handed to the platform multiband compressor. */
     val compressionRatio: Float = 4f,
@@ -61,14 +78,13 @@ data class StabilizerConfig(
     /** Posterior needed to switch the dominant class, which stops border flapping. */
     val classSwitchThreshold: Float = 0.55f,
 ) {
-    /** Effective settings after night mode is folded in. */
-    fun resolved(): StabilizerConfig = if (!nightMode) this else copy(
-        musicCeilingOffsetDb = musicCeilingOffsetDb + 4f,
-        maxAboveTargetDb = 0f,
-        maxBoostDb = maxBoostDb + 3f,
-        compressionRatio = compressionRatio + 2f,
-        duckReleaseMs = duckReleaseMs * 0.75f,
-    )
+    /**
+     * Effective settings once the preset has been applied.
+     *
+     * The user's own [targetDialogueLufs] and [strength] survive this: a preset
+     * decides how hard to work, not how loud you like your television.
+     */
+    fun resolved(): StabilizerConfig = preset.configure(this)
 
     init {
         require(strength in 0f..1f) { "strength must be within [0, 1]" }

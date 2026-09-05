@@ -2,6 +2,7 @@ package dev.autotune.core.engine
 
 import dev.autotune.core.dsp.LoudnessMeter
 import dev.autotune.core.features.AnalysisFormat
+import dev.autotune.core.features.FeatureVector
 import dev.autotune.core.features.FrameFeatures
 import dev.autotune.core.ml.AudioClass
 import dev.autotune.core.ml.AudioClassifier
@@ -29,6 +30,11 @@ import kotlin.math.min
  *     dialogue target. A misclassified stinger is still neutralised; the model
  *     decides how *gracefully* it is handled, not *whether* it is handled.
  *
+ *  4. **A sustained-loudness trim.** The three rules above all react to level.
+ *     None of them catches an advert break that sits exactly at the ceiling,
+ *     brick-walled, for ninety seconds - loud in a way that is fatiguing rather
+ *     than startling. That gets extra attenuation the longer it goes on.
+ *
  * The engine is single-threaded and allocation-free once constructed.
  */
 class StabilizerEngine(
@@ -50,6 +56,8 @@ class StabilizerEngine(
     private var pendingFrames = 0
     private var dialogueEqDb = 0f
     private var bassTrimDb = 0f
+    private var sustainedSeconds = 0f
+    private var sustainedTrimDb = 0f
 
     /**
      * Running estimate of how loud the dialogue in this scene is, updated only
@@ -64,11 +72,11 @@ class StabilizerEngine(
      */
     private var dialogueLevelLufs = Float.NaN
 
-    /** User settings before the per-app profile is applied. */
+    /** User settings, before the preset and the per-app profile are applied. */
     var config: StabilizerConfig = baseConfig
         set(value) {
             field = value
-            effective = profile.configure(value).resolved()
+            effective = resolve(value, profile)
         }
 
     /** Profile of the app currently playing. */
@@ -76,10 +84,20 @@ class StabilizerEngine(
         set(value) {
             if (field == value) return
             field = value
-            effective = value.configure(config).resolved()
+            effective = resolve(config, value)
         }
 
-    private var effective: StabilizerConfig = profile.configure(baseConfig).resolved()
+    private var effective: StabilizerConfig = resolve(baseConfig, AppProfile.GENERIC)
+
+    /**
+     * Temporarily fades the correction out without forgetting anything.
+     *
+     * This is the A/B switch: the fastest way to answer "is this actually doing
+     * anything?" is to turn it off for ten seconds. It fades rather than jumps,
+     * because a step change in gain on live audio is an audible click.
+     */
+    @Volatile
+    var bypassed: Boolean = false
 
     /** Latest decision. Safe to read from another thread; the reference is swapped atomically. */
     @Volatile
@@ -99,24 +117,37 @@ class StabilizerEngine(
             meter.process(samples, offset, chunk)
             extractor.process(samples, offset, chunk) { frame, features ->
                 classifier.classify(features, scores)
-                update(frame)
+                update(frame, features)
             }
             offset += chunk
         }
         return state
     }
 
-    private fun update(frame: FrameFeatures) {
+    /**
+     * Order matters: the preset sets the values, then the app being watched
+     * nudges them. Nudging first would be pointless - the preset would overwrite
+     * whatever the nudge had done.
+     */
+    private fun resolve(config: StabilizerConfig, profile: AppProfile): StabilizerConfig =
+        profile.configure(config.resolved())
+
+    private fun update(frame: FrameFeatures, features: FloatArray) {
         val cfg = effective
         val momentary = meter.momentaryLufs
         val shortTerm = meter.shortTermLufs
         val hasSignal = momentary > cfg.noiseFloorLufs
 
-        if (!cfg.enabled) {
-            smoother.reset(0f)
-            dialogueEqDb = 0f
-            bassTrimDb = 0f
-            publish(momentary, shortTerm, 0f, hasSignal)
+        if (!cfg.enabled || bypassed) {
+            // Fade out rather than reset: a step change in gain on audio that is
+            // already playing is a click.
+            smoother.setTimes(BYPASS_FADE_MS, BYPASS_FADE_MS)
+            val gain = smoother.step(0f)
+            dialogueEqDb += EQ_SMOOTHING * (0f - dialogueEqDb)
+            bassTrimDb += EQ_SMOOTHING * (0f - bassTrimDb)
+            sustainedSeconds = 0f
+            sustainedTrimDb = 0f
+            publish(momentary, shortTerm, gain, hasSignal)
             return
         }
 
@@ -153,6 +184,11 @@ class StabilizerEngine(
         // 3. Backstop that does not trust the classifier.
         val hardCeilingGain = cfg.targetDialogueLufs + cfg.maxAboveTargetDb - momentary
         target = min(target, hardCeilingGain)
+
+        // 4. Extra trim for loudness that simply will not stop.
+        updateSustainedTrim(cfg, momentary, ceilingLufs, features)
+        target += sustainedTrimDb
+
         target = target.coerceIn(-cfg.maxCutDb, cfg.maxBoostDb) * cfg.strength
 
         // A large drop is always urgent, whatever the class: that is the blast
@@ -176,6 +212,45 @@ class StabilizerEngine(
         bassTrimDb += EQ_SMOOTHING * (targetBassTrim - bassTrimDb)
 
         publish(momentary, shortTerm, gain, hasSignal = true)
+    }
+
+    /**
+     * Builds the sustained trim while the content is both loud and lifeless.
+     *
+     * Both conditions matter. Loud alone is the ceiling's job and would catch a
+     * dramatic climax that is *meant* to be loud. What distinguishes an advert
+     * break, a shopping channel or a badly mastered upload is that it is loud
+     * *and* has had every dynamic taken out of it: measured across the corpus,
+     * clean dialogue varies by about 24 dB inside a two-second window, a film
+     * score by 2 dB, and brick-walled advertising audio by under half a dB.
+     */
+    private fun updateSustainedTrim(
+        cfg: StabilizerConfig,
+        momentary: Float,
+        ceilingLufs: Float,
+        features: FloatArray,
+    ) {
+        val levelSpread = features[FeatureVector.LEVEL_STD]
+        val flatness = ((SUSTAINED_DYNAMICS_KNEE_DB - levelSpread) / SUSTAINED_DYNAMICS_RANGE_DB)
+            .coerceIn(0f, 1f)
+        val hop = format.hopDurationMs / 1000f
+
+        if (momentary > ceilingLufs && flatness > 0f) {
+            sustainedSeconds += hop * flatness
+        } else {
+            // Let it go quickly: the moment the content breathes again, or drops
+            // below the ceiling, this should stop applying.
+            sustainedSeconds -= hop * SUSTAINED_DECAY_RATE
+        }
+        sustainedSeconds = sustainedSeconds.coerceIn(0f, cfg.sustainedFullSeconds)
+
+        val progress = ((sustainedSeconds - cfg.sustainedOnsetSeconds) /
+            (cfg.sustainedFullSeconds - cfg.sustainedOnsetSeconds).coerceAtLeast(0.1f))
+            .coerceIn(0f, 1f)
+        // Smoothstep, so the trim eases in instead of arriving as a ramp.
+        val eased = progress * progress * (3f - 2f * progress)
+        val targetTrim = -cfg.sustainedTrimDb * eased
+        sustainedTrimDb += SUSTAINED_SMOOTHING * (targetTrim - sustainedTrimDb)
     }
 
     private fun updateDominantClass(cfg: StabilizerConfig) {
@@ -215,7 +290,9 @@ class StabilizerEngine(
             musicProbability = scores.music,
             effectsProbability = scores.effects,
             dominantClass = dominant,
+            sustainedTrimDb = sustainedTrimDb,
             hasSignal = hasSignal,
+            bypassed = bypassed,
             profile = profile,
         )
     }
@@ -230,6 +307,8 @@ class StabilizerEngine(
         pendingFrames = 0
         dialogueEqDb = 0f
         bassTrimDb = 0f
+        sustainedSeconds = 0f
+        sustainedTrimDb = 0f
         dialogueLevelLufs = Float.NaN
         state = StabilizerState(limiterCeilingDb = effective.limiterCeilingDb)
     }
@@ -249,6 +328,17 @@ class StabilizerEngine(
 
         /** One-pole coefficient for a ~2 s memory of the dialogue level at a 32 ms hop. */
         const val DIALOGUE_LEVEL_COEFFICIENT = 0.016f
+
+        /** Level spread, in dB, below which content counts as having no dynamics left. */
+        const val SUSTAINED_DYNAMICS_KNEE_DB = 2.5f
+        const val SUSTAINED_DYNAMICS_RANGE_DB = 2f
+
+        /** The trim releases this many times faster than it builds. */
+        const val SUSTAINED_DECAY_RATE = 4f
+        const val SUSTAINED_SMOOTHING = 0.05f
+
+        /** Fade applied when bypassing, long enough not to click. */
+        const val BYPASS_FADE_MS = 250f
 
         const val CLARITY_RANGE_DB = 6f
         const val BASS_RANGE_DB = 6f

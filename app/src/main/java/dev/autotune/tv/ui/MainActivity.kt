@@ -10,10 +10,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.autotune.core.engine.AppProfile
+import dev.autotune.core.engine.ListeningPreset
 import dev.autotune.tv.R
 import dev.autotune.tv.capture.AnalysisSourceFactory
 import dev.autotune.tv.databinding.ActivityMainBinding
 import dev.autotune.tv.databinding.ViewSettingRowBinding
+import dev.autotune.tv.service.StabilizerService
 import dev.autotune.tv.service.StabilizerServiceController
 import dev.autotune.tv.service.StabilizerStatus
 import dev.autotune.tv.service.StabilizerStatusBus
@@ -33,6 +35,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var settings: SettingsRepository
     private lateinit var monitor: PlaybackMonitor
+    private var bypassed = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -72,6 +75,26 @@ class MainActivity : AppCompatActivity() {
             refreshRows()
         }
 
+        // Left/right cycles the presets, which is the one control most people
+        // will ever touch.
+        binding.rowPreset.onAdjust { direction ->
+            val presets = ListeningPreset.entries
+            val next = (presets.indexOf(settings.preset) + direction + presets.size) % presets.size
+            settings.preset = presets[next]
+            refreshRows()
+        }
+        binding.rowPreset.onSelect {
+            val presets = ListeningPreset.entries
+            settings.preset = presets[(presets.indexOf(settings.preset) + 1) % presets.size]
+            refreshRows()
+        }
+
+        binding.rowCompare.onSelect {
+            startService(
+                Intent(this, StabilizerService::class.java).setAction(StabilizerService.ACTION_TOGGLE_BYPASS),
+            )
+        }
+
         binding.rowStrength.onAdjust { direction ->
             settings.strength = (settings.strength + direction * 0.05f).coerceIn(0f, 1f)
             refreshRows()
@@ -84,11 +107,9 @@ class MainActivity : AppCompatActivity() {
 
         binding.rowMusicHeadroom.onAdjust { direction ->
             settings.musicCeilingOffsetDb = (settings.musicCeilingOffsetDb + direction * 0.5f).coerceIn(0f, 12f)
-            refreshRows()
-        }
-
-        binding.rowNightMode.onSelect {
-            settings.nightMode = !settings.nightMode
+            // Touching a value a preset owns switches to Custom, rather than
+            // leaving a slider on screen that visibly does nothing.
+            settings.preset = ListeningPreset.CUSTOM
             refreshRows()
         }
 
@@ -123,6 +144,14 @@ class MainActivity : AppCompatActivity() {
             getString(R.string.action_enable),
             if (settings.enabled) getString(R.string.status_running) else getString(R.string.status_stopped),
         )
+        binding.rowPreset.set(
+            "${getString(R.string.action_preset)}  ${settings.preset.label}",
+            settings.preset.summary,
+        )
+        binding.rowCompare.set(
+            getString(R.string.action_compare),
+            if (bypassed) getString(R.string.action_resume) else getString(R.string.hint_compare),
+        )
         binding.rowStrength.set(
             "${getString(R.string.action_strength)}  ${(settings.strength * 100).toInt()}%",
             getString(R.string.hint_strength),
@@ -131,13 +160,14 @@ class MainActivity : AppCompatActivity() {
             "${getString(R.string.action_dialogue_target)}  %.1f LUFS".format(settings.targetDialogueLufs),
             getString(R.string.hint_dialogue_target),
         )
+        val effectiveHeadroom = settings.toConfig().resolved().musicCeilingOffsetDb
         binding.rowMusicHeadroom.set(
-            "${getString(R.string.action_music_headroom)}  %.1f dB".format(settings.musicCeilingOffsetDb),
-            getString(R.string.hint_music_headroom),
-        )
-        binding.rowNightMode.set(
-            getString(R.string.action_night_mode),
-            if (settings.nightMode) "On" else "Off",
+            "${getString(R.string.action_music_headroom)}  %.1f dB".format(effectiveHeadroom),
+            if (settings.preset == ListeningPreset.CUSTOM) {
+                getString(R.string.hint_music_headroom)
+            } else {
+                "Set by the ${settings.preset.label} preset - change it to switch to Custom"
+            },
         )
         binding.rowCapture.set(
             getString(R.string.action_grant_capture),
@@ -163,6 +193,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun render(status: StabilizerStatus) {
         binding.meter.state = status.state
+        if (bypassed != status.bypassed) {
+            bypassed = status.bypassed
+            refreshRows()
+        }
         binding.statusText.text = buildString {
             appendLine(if (status.running) getString(R.string.status_running) else getString(R.string.status_stopped))
             appendLine(
@@ -184,6 +218,10 @@ class MainActivity : AppCompatActivity() {
             if (profile == AppProfile.GENERIC && app == null && !monitor.hasAccess()) {
                 append(" · ")
                 append(getString(R.string.hint_notifications))
+            }
+            if (status.state.sustainedTrimDb < -0.5f) {
+                appendLine()
+                append(getString(R.string.status_advert_trim, -status.state.sustainedTrimDb))
             }
         }
     }

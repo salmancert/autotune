@@ -132,12 +132,68 @@ class StabilizerEngineTest {
     }
 
     @Test
-    fun `night mode holds music further down`() {
+    fun `late night holds music further down than films`() {
         // Well inside the cut limit, so the difference is the ceiling and not
         // the clamp.
-        val normal = musicEngine(StabilizerConfig(nightMode = false)).feed(seconds = 3.0, dbfs = -16.0)
-        val night = musicEngine(StabilizerConfig(nightMode = true)).feed(seconds = 3.0, dbfs = -16.0)
-        assertTrue("normal ${normal.gainDb} night ${night.gainDb}", night.gainDb < normal.gainDb - 2f)
+        val films = musicEngine(StabilizerConfig(preset = ListeningPreset.MOVIES))
+            .feed(seconds = 3.0, dbfs = -16.0)
+        val night = musicEngine(StabilizerConfig(preset = ListeningPreset.LATE_NIGHT))
+            .feed(seconds = 3.0, dbfs = -16.0)
+        assertTrue("films ${films.gainDb} late night ${night.gainDb}", night.gainDb < films.gainDb - 2f)
+    }
+
+    @Test
+    fun `news corrects more gently than films`() {
+        val films = musicEngine(StabilizerConfig(preset = ListeningPreset.MOVIES))
+            .feed(seconds = 3.0, dbfs = -16.0)
+        val news = musicEngine(StabilizerConfig(preset = ListeningPreset.NEWS))
+            .feed(seconds = 3.0, dbfs = -16.0)
+        assertTrue("films ${films.gainDb} news ${news.gainDb}", news.gainDb > films.gainDb + 1f)
+    }
+
+    @Test
+    fun `custom leaves the users own settings alone`() {
+        val config = StabilizerConfig(preset = ListeningPreset.CUSTOM, musicCeilingOffsetDb = 9f)
+        assertEquals(9.0, config.resolved().musicCeilingOffsetDb.toDouble(), 0.0)
+        // A preset, by contrast, owns that value.
+        assertEquals(
+            5.0,
+            config.copy(preset = ListeningPreset.MOVIES).resolved().musicCeilingOffsetDb.toDouble(),
+            0.0,
+        )
+    }
+
+    @Test
+    fun `every preset keeps the users level and strength`() {
+        val base = StabilizerConfig(targetDialogueLufs = -17f, strength = 0.4f)
+        for (preset in ListeningPreset.entries) {
+            val resolved = base.copy(preset = preset).resolved()
+            assertEquals(preset.name, -17.0, resolved.targetDialogueLufs.toDouble(), 0.0)
+            assertEquals(preset.name, 0.4, resolved.strength.toDouble(), 1e-6)
+        }
+    }
+
+    @Test
+    fun `bypass fades the correction out instead of dropping it`() {
+        val engine = musicEngine()
+        val ducked = engine.feed(seconds = 3.0, dbfs = -8.0)
+        assertTrue("expected a duck first, got ${ducked.gainDb}", ducked.gainDb < -8f)
+
+        engine.bypassed = true
+        // One hop in, the gain has started to move but is nowhere near zero: a
+        // jump to unity here would be an audible click.
+        val justAfter = engine.feed(seconds = 0.032, dbfs = -8.0)
+        assertTrue("gain jumped straight to ${justAfter.gainDb}", justAfter.gainDb < ducked.gainDb / 2f)
+
+        val faded = engine.feed(seconds = 1.5, dbfs = -8.0)
+        assertEquals(0.0, faded.gainDb.toDouble(), 0.2)
+        assertTrue(faded.bypassed)
+
+        // And it comes back when released.
+        engine.bypassed = false
+        val restored = engine.feed(seconds = 2.0, dbfs = -8.0)
+        assertTrue("did not resume, gain ${restored.gainDb}", restored.gainDb < -8f)
+        assertTrue(!restored.bypassed)
     }
 
     @Test

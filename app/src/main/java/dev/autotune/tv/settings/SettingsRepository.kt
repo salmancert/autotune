@@ -3,6 +3,7 @@ package dev.autotune.tv.settings
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
+import dev.autotune.core.engine.ListeningPreset
 import dev.autotune.core.engine.StabilizerConfig
 
 /**
@@ -25,9 +26,10 @@ class SettingsRepository(context: Context) {
         get() = preferences.getBoolean(KEY_START_ON_BOOT, true)
         set(value) = preferences.edit { putBoolean(KEY_START_ON_BOOT, value) }
 
-    var nightMode: Boolean
-        get() = preferences.getBoolean(KEY_NIGHT_MODE, false)
-        set(value) = preferences.edit { putBoolean(KEY_NIGHT_MODE, value) }
+    /** What the user is watching. Presets own the correction settings; Custom does not. */
+    var preset: ListeningPreset
+        get() = ListeningPreset.fromName(preferences.getString(KEY_PRESET, null))
+        set(value) = preferences.edit { putString(KEY_PRESET, value.name) }
 
     /** 0..1. */
     var strength: Float
@@ -56,7 +58,7 @@ class SettingsRepository(context: Context) {
         targetDialogueLufs = targetDialogueLufs,
         musicCeilingOffsetDb = musicCeilingOffsetDb,
         strength = strength,
-        nightMode = nightMode,
+        preset = preset,
     )
 
     fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
@@ -71,7 +73,7 @@ class SettingsRepository(context: Context) {
         const val NAME = "autotune-settings"
         const val KEY_ENABLED = "enabled"
         const val KEY_START_ON_BOOT = "startOnBoot"
-        const val KEY_NIGHT_MODE = "nightMode"
+        const val KEY_PRESET = "preset"
         const val KEY_STRENGTH = "strength"
         const val KEY_DIALOGUE_TARGET = "dialogueTarget"
         const val KEY_MUSIC_OFFSET = "musicOffset"

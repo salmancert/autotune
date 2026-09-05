@@ -48,6 +48,14 @@
             layout="@layout/view_setting_row" />
 
         <include
+            android:id="@+id/rowPreset"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowCompare"
+            layout="@layout/view_setting_row" />
+
+        <include
             android:id="@+id/rowStrength"
             layout="@layout/view_setting_row" />
 
@@ -57,10 +65,6 @@
 
         <include
             android:id="@+id/rowMusicHeadroom"
-            layout="@layout/view_setting_row" />
-
-        <include
-            android:id="@+id/rowNightMode"
             layout="@layout/view_setting_row" />
 
         <include

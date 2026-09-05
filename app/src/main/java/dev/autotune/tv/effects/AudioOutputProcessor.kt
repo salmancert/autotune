@@ -28,6 +28,15 @@ interface AudioOutputProcessor : Closeable {
      */
     fun applyStaticPreset(config: StabilizerConfig)
 
+    /**
+     * Switches the whole chain out, compressor and limiter included.
+     *
+     * A true A/B needs the compressor gone as well as the gain, otherwise the
+     * comparison flatters the app. The engine fades its gain to unity first, so
+     * this lands on audio that is already at unity and does not click.
+     */
+    fun setBypassed(bypassed: Boolean)
+
     companion object {
         /**
          * Effect parameter writes cross into the audio HAL, so they are throttled;

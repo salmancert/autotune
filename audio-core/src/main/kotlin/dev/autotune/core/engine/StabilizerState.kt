@@ -37,6 +37,12 @@ data class StabilizerState(
     /** Class currently driving the decision, after hysteresis. */
     val dominantClass: AudioClass = AudioClass.EFFECTS,
 
+    /** Extra attenuation from sustained, dynamics-free loudness (advert breaks). */
+    val sustainedTrimDb: Float = 0f,
+
+    /** True while the correction is faded out for an A/B comparison. */
+    val bypassed: Boolean = false,
+
     /** False while the input is below the noise floor - the gain is frozen. */
     val hasSignal: Boolean = false,
 

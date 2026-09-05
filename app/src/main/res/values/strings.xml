@@ -2,8 +2,6 @@
 <resources>
     <string name="app_name">Autotune</string>
     <string name="app_tagline">Dialogue you can hear, music that stays put</string>
-
-    <string name="status_heading">Status</string>
     <string name="status_running">Stabiliser running</string>
     <string name="status_stopped">Stabiliser stopped</string>
     <string name="status_analysis_format">Listening via %1$s</string>
@@ -13,7 +11,10 @@
     <string name="status_profile_format">Profile: %1$s</string>
 
     <string name="action_enable">Stabiliser</string>
-    <string name="action_night_mode">Night mode</string>
+    <string name="action_preset">Watching</string>
+    <string name="action_bypass">Bypass</string>
+    <string name="action_resume">Resume</string>
+    <string name="action_compare">Compare with it off</string>
     <string name="action_strength">Correction strength</string>
     <string name="action_dialogue_target">Dialogue level</string>
     <string name="action_music_headroom">Keep music below dialogue by</string>
@@ -33,12 +34,15 @@
     <string name="meter_music">Music</string>
     <string name="meter_effects">Effects</string>
     <string name="meter_gain">Applied gain</string>
+    <string name="status_advert_trim">Holding down a long loud stretch (%1$.1f dB extra)</string>
+    <string name="hint_compare">Fades the correction out so you can hear the difference.</string>
     <string name="meter_loudness">Loudness</string>
     <string name="meter_gain_format">%+.1f dB</string>
     <string name="meter_loudness_format">%.1f LUFS</string>
 
     <string name="notification_channel">Audio stabiliser</string>
     <string name="notification_title">Autotune is levelling TV audio</string>
+    <string name="notification_title_bypassed">Autotune is paused</string>
     <string name="notification_text_format">%1$s · %2$s</string>
     <string name="notification_needs_permission">Tap to let Autotune listen to playback</string>
 

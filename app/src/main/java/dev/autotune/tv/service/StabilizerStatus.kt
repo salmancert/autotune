@@ -12,6 +12,7 @@ data class StabilizerStatus(
     val sourceLabel: String? = null,
     val processorLabel: String? = null,
     val playingPackage: String? = null,
+    val bypassed: Boolean = false,
     val state: StabilizerState = StabilizerState(),
 ) {
     /** True when the engine is adapting rather than sitting on the fixed preset. */
