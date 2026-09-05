@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background"
+    android:paddingStart="48dp"
+    android:paddingTop="32dp"
+    android:paddingEnd="48dp"
+    android:paddingBottom="32dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="@color/text_primary"
+            android:textSize="32sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:text="@string/app_tagline"
+            android:textColor="@color/text_secondary"
+            android:textSize="16sp" />
+
+        <dev.autotune.tv.ui.LevelMeterView
+            android:id="@+id/meter"
+            android:layout_width="match_parent"
+            android:layout_height="180dp"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:lineSpacingExtra="4dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp" />
+
+        <include
+            android:id="@+id/rowEnabled"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowStrength"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowDialogueTarget"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowMusicHeadroom"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowNightMode"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowCapture"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowNotificationAccess"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowMicrophone"
+            layout="@layout/view_setting_row" />
+
+        <include
+            android:id="@+id/rowBoot"
+            layout="@layout/view_setting_row" />
+
+    </LinearLayout>
+
+</ScrollView>

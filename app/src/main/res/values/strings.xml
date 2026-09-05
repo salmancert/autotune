@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Autotune</string>
+    <string name="app_tagline">Dialogue you can hear, music that stays put</string>
+
+    <string name="status_heading">Status</string>
+    <string name="status_running">Stabiliser running</string>
+    <string name="status_stopped">Stabiliser stopped</string>
+    <string name="status_analysis_format">Listening via %1$s</string>
+    <string name="status_no_analysis">No audio analysis available - running the fixed dialogue preset</string>
+    <string name="status_effect_format">Output processing: %1$s</string>
+    <string name="status_no_effect">Output processing unavailable on this device</string>
+    <string name="status_profile_format">Profile: %1$s</string>
+
+    <string name="action_enable">Stabiliser</string>
+    <string name="action_night_mode">Night mode</string>
+    <string name="action_strength">Correction strength</string>
+    <string name="action_dialogue_target">Dialogue level</string>
+    <string name="action_music_headroom">Keep music below dialogue by</string>
+    <string name="action_grant_capture">Grant audio capture</string>
+    <string name="action_grant_notifications">Grant app detection</string>
+    <string name="action_use_microphone">Use microphone as fallback</string>
+    <string name="action_start_on_boot">Start when the TV starts</string>
+
+    <string name="hint_strength">How hard the stabiliser corrects. Lower it if the sound feels squashed.</string>
+    <string name="hint_dialogue_target">Where speech should sit. Raise it if dialogue is still too quiet.</string>
+    <string name="hint_music_headroom">How far under dialogue loud music is held.</string>
+    <string name="hint_capture">Playback capture needs your permission each time the TV restarts.</string>
+    <string name="hint_notifications">Lets Autotune tell Netflix from YouTube and pick the right profile.</string>
+    <string name="hint_microphone">If nothing else can be captured, Autotune can listen to the room instead.</string>
+
+    <string name="meter_dialogue">Dialogue</string>
+    <string name="meter_music">Music</string>
+    <string name="meter_effects">Effects</string>
+    <string name="meter_gain">Applied gain</string>
+    <string name="meter_loudness">Loudness</string>
+    <string name="meter_gain_format">%+.1f dB</string>
+    <string name="meter_loudness_format">%.1f LUFS</string>
+
+    <string name="notification_channel">Audio stabiliser</string>
+    <string name="notification_title">Autotune is levelling TV audio</string>
+    <string name="notification_text_format">%1$s · %2$s</string>
+    <string name="notification_needs_permission">Tap to let Autotune listen to playback</string>
+
+    <string name="consent_denied">Capture permission was declined. Autotune will keep the fixed preset running.</string>
+</resources>

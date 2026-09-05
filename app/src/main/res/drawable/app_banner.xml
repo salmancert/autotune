@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#10141B"
+        android:pathData="M0,0h320v180h-320z" />
+    <!-- A loud peak being pulled down to sit level with speech. -->
+    <path
+        android:fillColor="#4CC2FF"
+        android:pathData="M40,100h12v40h-12z M60,84h12v56h-12z M80,96h12v44h-12z M100,78h12v62h-12z" />
+    <path
+        android:fillColor="#FF9E4C"
+        android:pathData="M124,60h12v80h-12z M144,44h12v96h-12z M164,66h12v74h-12z" />
+    <path
+        android:fillColor="#4CC2FF"
+        android:pathData="M188,92h12v48h-12z M208,80h12v60h-12z M228,98h12v42h-12z M248,86h12v54h-12z" />
+    <path
+        android:strokeColor="#9AA7B8"
+        android:strokeWidth="2"
+        android:pathData="M32,74 L288,74" />
+</vector>

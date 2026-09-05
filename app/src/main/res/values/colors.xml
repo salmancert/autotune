@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#FF10141B</color>
+    <color name="surface">#FF19202B</color>
+    <color name="surface_focused">#FF25303F</color>
+    <color name="text_primary">#FFEAF0F7</color>
+    <color name="text_secondary">#FF9AA7B8</color>
+    <color name="accent">#FF4CC2FF</color>
+    <color name="dialogue">#FF4CC2FF</color>
+    <color name="music">#FFFF9E4C</color>
+    <color name="effects">#FF9C8CFF</color>
+    <color name="meter_track">#FF2A3442</color>
+</resources>
