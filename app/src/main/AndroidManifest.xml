@@ -34,7 +34,6 @@
         android:required="false" />
 
     <application
-        android:name=".AutotuneApplication"
         android:allowBackup="true"
         android:banner="@drawable/app_banner"
         android:icon="@mipmap/ic_launcher"

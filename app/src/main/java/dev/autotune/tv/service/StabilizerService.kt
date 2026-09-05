@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.graphics.drawable.Icon
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
@@ -86,6 +87,11 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 return START_NOT_STICKY
             }
             ACTION_TOGGLE_BYPASS -> {
+                // This can arrive when the service is not yet running (the
+                // notification survives a process death), and a service started
+                // without startForeground is killed within five seconds.
+                promoteForeground(withProjection = projection != null, withMicrophone = false)
+                ensureRunning(userInitiated = false)
                 setBypassed(!engine.bypassed)
                 return START_STICKY
             }
@@ -143,8 +149,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     private fun setBypassed(bypassed: Boolean) {
         engine.bypassed = bypassed
         StabilizerStatusBus.update { it.copy(bypassed = bypassed) }
-        handler?.postDelayed({ processor?.setBypassed(bypassed) }, BYPASS_SETTLE_MS)
-        if (!bypassed) processor?.setBypassed(false)
+        if (bypassed) {
+            handler?.postDelayed({ processor?.setBypassed(true) }, BYPASS_SETTLE_MS)
+        } else {
+            // Coming back is immediate: the effect returns first, then the
+            // engine's gain ramps in from unity.
+            handler?.post { processor?.setBypassed(false) }
+        }
         updateNotification()
     }
 
@@ -398,7 +409,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentIntent(open)
             .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, toggleLabel, toggle).build())
+            .addAction(
+                Notification.Action.Builder(
+                    Icon.createWithResource(this, R.drawable.ic_launcher_foreground),
+                    toggleLabel,
+                    toggle,
+                ).build(),
+            )
             .build()
     }
 
