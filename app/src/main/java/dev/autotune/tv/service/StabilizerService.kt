@@ -343,10 +343,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         }
 
         try {
-            if (types != 0) {
+            // The three-argument form only exists from API 29. `types` is only
+            // ever non-zero on 29+, but the check has to be explicit for that to
+            // be provable rather than merely true.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && types != 0) {
                 startForeground(NOTIFICATION_ID, notification, types)
             } else {
-                // Pre-34 with nothing special to claim: the manifest types apply.
+                // Older releases, or nothing special to claim: the manifest types apply.
                 startForeground(NOTIFICATION_ID, notification)
             }
         } catch (error: Exception) {

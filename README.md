@@ -156,12 +156,77 @@ a privileged install.
 
 ## Install
 
-Build the APK:
+### Easiest: take the APK from CI
+
+Every push builds one. Open the repository's
+**Actions** tab, click the most recent green *CI* run, and download the
+**autotune-debug-apk** artifact at the bottom of the page. Unzip it and you have
+`app-debug.apk` — no toolchain to install at all. (Artifacts need you to be signed
+in to GitHub, and expire after 90 days. To build one on demand without pushing,
+use *Actions → CI → Run workflow*.)
+
+### Build it yourself on Linux
+
+One script, which installs the Android SDK for you if you do not have one:
 
 ```bash
+tools/build-apk.sh                        # just build
+tools/build-apk.sh --install 192.168.1.50 # build, connect to the TV, install, launch
+```
+
+It needs Java 17+ (`sudo apt install openjdk-17-jdk`), `curl` and `unzip`, and
+puts the SDK under `~/Android/Sdk` — nothing system-wide, no root. The first run
+downloads a few hundred MB of SDK; later runs take seconds.
+
+Doing it by hand comes to the same thing:
+
+```bash
+# 1. SDK (skip if you already have one; just set ANDROID_HOME)
+mkdir -p ~/Android/Sdk/cmdline-tools && cd ~/Android/Sdk/cmdline-tools
+curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip commandlinetools-linux-*.zip && mv cmdline-tools latest
+export ANDROID_HOME=~/Android/Sdk
+yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+    "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+# 2. Build
+cd /path/to/autotune
+echo "sdk.dir=$ANDROID_HOME" > local.properties
 ./gradlew :app:assembleDebug
-adb connect <tv-ip>:5555
+```
+
+The APK lands at `app/build/outputs/apk/debug/app-debug.apk` (~2 MB). It is signed
+with the standard debug key, which is fine for sideloading onto your own TV.
+
+### Getting it onto the TV
+
+1. On the TV: **Settings → Device Preferences → About**, click **Build** seven
+   times, then **Settings → Device Preferences → Developer options → ADB
+   debugging** (called *USB debugging* on some builds) → on.
+2. Find its address under **Settings → Network → your network → IP address**.
+3. From the Linux box:
+
+```bash
+adb connect 192.168.1.50:5555      # accept the prompt that appears on the TV
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+If Autotune does not appear in the TV's app row, launch it directly:
+
+```bash
+adb shell monkey -p dev.autotune.tv -c android.intent.category.LEANBACK_LAUNCHER 1
+```
+
+Common snags: `INSTALL_FAILED_UPDATE_INCOMPATIBLE` means an older copy signed with
+a different key is installed — `adb uninstall dev.autotune.tv` first.
+`device unauthorized` means the confirmation dialog on the TV has not been accepted
+yet. `adb: no devices` after a TV reboot just needs `adb connect` again.
+
+To watch it work:
+
+```bash
+adb logcat -s StabilizerService:* PlaybackCapture:* DynamicsProcessor:* OutputMixSource:*
 ```
 
 Then open Autotune from the TV's app row and work down the screen:
@@ -389,7 +454,7 @@ a scene where dialogue sits just over the score, a crowded bazaar, a phone call.
 | `audio-core` | FFT, biquads, BS.1770 loudness, features, model inference, the engine | No — plain Kotlin/JVM |
 | `model-training` | Corpus synthesis, the trainer, model-quality tests | No |
 | `app` | Capture, effects, service, boot receiver, TV UI | Yes |
-| `tools/` | `fetch-corpus.sh`, for pulling training audio on your own machine | — |
+| `tools/` | `build-apk.sh` and `fetch-corpus.sh`, both run on your own machine | — |
 
 All the signal processing and decision logic lives outside the Android module, so it
 is unit-testable on any JVM:

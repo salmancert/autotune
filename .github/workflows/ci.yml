@@ -4,6 +4,8 @@ on:
   push:
     branches: ["**"]
   pull_request:
+  # So an APK can be built on demand without pushing anything.
+  workflow_dispatch:
 
 jobs:
   core:
@@ -55,10 +57,24 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug :app:lintDebug
+        run: ./gradlew :app:assembleDebug
 
+      # Uploaded before lint runs, and on failure too: a lint warning should
+      # never be the reason there is no APK to install.
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: autotune-debug
+          name: autotune-debug-apk
           path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug
+
+      - name: Upload lint report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint-results-debug.html
