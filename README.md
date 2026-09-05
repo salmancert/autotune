@@ -66,9 +66,9 @@ and runs the whole chain over it:
 | | dialogue | music | gap |
 |---|---|---|---|
 | before | −34.1 LUFS | −15.0 LUFS | **19.1 dB** |
-| after | −24.3 LUFS | −24.0 LUFS | **0.2 dB** |
+| after | −24.4 LUFS | −24.0 LUFS | **0.4 dB** |
 
-Dialogue came up 9.8 dB, music came down 9.0 dB. Both directions matter: turning
+Dialogue came up 9.7 dB, music came down 9.0 dB. Both directions matter: turning
 everything down would have "fixed" the gap without making the dialogue audible.
 
 ## Platform reality
@@ -170,11 +170,11 @@ it. It also means the accuracy below is *on synthetic audio*, and should not be 
 as a claim about real film mixes:
 
 ```
-frame accuracy 0.97, clip accuracy 0.97   (unseen seed, 120 clips)
+frame accuracy 0.98, clip accuracy 0.99   (unseen seed, 120 clips)
              SPEECH    MUSIC  EFFECTS
-SPEECH         3658      102        0
-MUSIC           144     3565       51
-EFFECTS           0       47     3713
+SPEECH         3675       24       61
+MUSIC            54     3695       11
+EFFECTS          30       69     3661
 ```
 
 The corpus deliberately includes the cases that break naive detectors: dialogue
@@ -182,6 +182,15 @@ mixed only 3 dB over a score, sung vocals (a voice, but musical), sparse solo pi
 with speech-like gaps, applause, helicopter rotors and alarm beeps (periodic without
 being music), band-limited broadcast speech, and playback-chain damage — speaker EQ
 tilt, broadcast compression, noise floors, clipping.
+
+It also carries the specific shape of television drama: a **sustained,
+percussion-free score bed** holding chords under a scene, and the swelling
+scene-transition sting. Serial drama — Pakistani and Indian especially — runs a
+score under nearly every scene, and it looks nothing like the drum-driven music a
+generic generator produces: no beat for the pulse feature to find, no gaps for the
+low-energy feature to find, both layers continuous and harmonic. Without it in the
+corpus the model learns "music has drums", which is the wrong lesson for exactly
+the content this app is most needed on.
 
 Retrain and rewrite the weights file:
 
@@ -194,6 +203,124 @@ Retrain and rewrite the weights file:
 TensorFlow Lite model (YAMNet or similar) can be dropped in behind it without the
 engine changing, at the cost of APK size and CPU.
 
+## Training on your own channels
+
+The shipped model is trained on synthesis. Real audio from the channels *you*
+actually watch will beat it on those channels, and a couple of hours is enough
+because the pipeline fine-tunes from the shipped weights rather than starting over.
+
+Everything below runs on your machine — the build never touches the network.
+
+### 1. Get the audio
+
+```bash
+tools/fetch-corpus.sh ary   "https://www.youtube.com/@<ARY channel>/videos"   8
+tools/fetch-corpus.sh humtv "https://www.youtube.com/@<Hum TV channel>/videos" 8
+```
+
+Needs `yt-dlp` and `ffmpeg`. Paste the channel, playlist or episode URL from your
+browser — handles change, so check the one you want rather than trusting a string in
+a README. The script keeps ten minutes per video and converts to the 16 kHz mono WAV
+the pipeline reads; that is all the model ever sees, so nothing richer is worth
+storing. Downloading from YouTube is against its Terms of Service, and whether that
+matters for a private training set you never redistribute is your call to make.
+
+Already have audio? Skip this entirely. Any WAV works: recordings off an HDMI
+capture, your own files, a DVD rip.
+
+### 2. Draft the labels
+
+```bash
+./gradlew :model-training:autoLabel --args="data/ary --source=ary"
+```
+
+Hand-labelling four hours of drama is work nobody finishes, and a corpus nobody
+finishes trains nothing. So the current model drafts it: it writes `labels.csv` with
+a row per scene, and `review.csv` holding the 60 segments it was *least* sure about.
+
+Open `review.csv`, listen to those spans, and fix the ones it got wrong in
+`labels.csv` — change the label, or delete the row if you cannot tell. That is the
+whole job: your attention goes where the information is, not where the model was
+already right.
+
+```
+# file, start, end, label, source, confidence
+ary/ary-abc123.wav, 41.50, 78.00, speech, ary, 0.99
+ary/ary-abc123.wav, 79.50, 96.00, music,  ary, 0.58   <- worth a listen
+```
+
+Labels are `speech`, `music` or `effects` (aliases: `dialogue`, `ost`, `sfx`, …).
+Prefer clean examples: a scene that is *mostly* dialogue with a quiet bed under it is
+`speech` — that is exactly what the app has to get right — but a span that genuinely
+changes halfway is better deleted than guessed. If you would rather cut clips by
+hand, drop them into `data/ary/speech/`, `data/ary/music/`, `data/ary/effects/` and
+point `--data` at the folder instead.
+
+### 3. Fine-tune
+
+```bash
+./gradlew :model-training:trainModel --args="--data=data/ary/labels.csv --fine-tune"
+```
+
+Point `--data` at a manifest or a directory; pass several by concatenating the
+manifests. What `--fine-tune` changes:
+
+- it starts from the shipped weights instead of random ones, so two hours of
+  television adjusts a boundary the synthetic corpus already found, rather than
+  being memorised;
+- it keeps that model's feature standardisation, because the warm-started weights
+  are only meaningful in the scaling they were trained in;
+- it takes smaller steps (lr 0.002) over fewer epochs, so the run does not forget
+  synthesis in order to fit one channel.
+
+Real rows count for 4× a synthetic one (`--real-weight=N`), otherwise a small,
+precious corpus gets averaged away. The synthetic corpus stays in the mix on
+purpose — dropped entirely, the model overfits your episodes and gets worse on
+everything else you watch.
+
+The split is **by file, never by segment**: two scenes from one episode share a mix
+engineer and a cast, so letting one into training and the other into the held-out
+set would measure memorisation and call it accuracy. Held-out files are reported
+separately, per source, against what the shipped model scores on the same audio:
+
+```
+real held-out (unseen files)
+  frame accuracy: 0.91
+  bundled model on the same audio: 0.84  (+0.07)
+  ary              0.93
+  humtv            0.89
+```
+
+If that delta is not positive, do not ship the model — the honest outcomes are
+"needs more data", "the labels have mistakes in them", or "synthesis was already
+good enough here".
+
+### 4. Check it, then install it
+
+```bash
+./gradlew :model-training:evaluateModel --args="data/humtv/labels.csv"   # bundled
+./gradlew :model-training:evaluateModel --args="data/humtv/labels.csv --model=<new>.model"
+```
+
+`trainModel` writes straight into
+`audio-core/src/main/resources/dev/autotune/core/ml/speech_music_mlp.model`, so
+rebuilding the app ships your model:
+
+```bash
+./gradlew :app:assembleDebug && adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Add `--dry-run` to see the numbers without overwriting the committed weights. To get
+back to the shipped model: `git checkout audio-core/src/main/resources`.
+
+### How much audio is enough?
+
+Roughly 30 minutes per class per channel is where fine-tuning starts to beat
+synthesis; a couple of hours is comfortable. Coverage matters more than volume —
+ten episodes of one drama teach less than two episodes each of five, and the
+material worth labelling most is what the model already finds hard: the title song,
+a scene where dialogue sits just over the score, a crowded bazaar, a phone call.
+
 ## Repository layout
 
 | Module | What it is | Android? |
@@ -201,6 +328,7 @@ engine changing, at the cost of APK size and CPU.
 | `audio-core` | FFT, biquads, BS.1770 loudness, features, model inference, the engine | No — plain Kotlin/JVM |
 | `model-training` | Corpus synthesis, the trainer, model-quality tests | No |
 | `app` | Capture, effects, service, boot receiver, TV UI | Yes |
+| `tools/` | `fetch-corpus.sh`, for pulling training audio on your own machine | — |
 
 All the signal processing and decision logic lives outside the Android module, so it
 is unit-testable on any JVM:
@@ -242,4 +370,9 @@ it never reads a notification.
   unavailable rather than pretending to work.
 - The microphone fallback is a genuine closed loop. Applied gain is subtracted back
   out, but reverberant rooms and delay still degrade the estimate.
-- Model accuracy is measured on synthetic audio.
+- Model accuracy is measured on synthetic audio unless you retrain it on your own
+  recordings, which is what [Training on your own channels](#training-on-your-own-channels)
+  is for.
+- Segment boundaries drafted by `autoLabel` are approximate: the classifier turns
+  over somewhere inside a transition, so each segment is trimmed half a second at
+  both ends before it becomes training data.

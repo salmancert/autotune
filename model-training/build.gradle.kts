@@ -49,3 +49,27 @@ val trainModel by tasks.registering(JavaExec::class) {
             .asFile.absolutePath,
     )
 }
+
+/**
+ * Drafts labels for real recordings so they only have to be corrected:
+ *
+ *   ./gradlew :model-training:autoLabel --args="data/ary --source=ary"
+ */
+val autoLabel by tasks.registering(JavaExec::class) {
+    group = "autotune"
+    description = "Drafts a label manifest for downloaded audio using the current model."
+    mainClass.set("dev.autotune.training.data.AutoLabelerKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}
+
+/**
+ * Scores a model against labelled recordings:
+ *
+ *   ./gradlew :model-training:evaluateModel --args="data/labels.csv"
+ */
+val evaluateModel by tasks.registering(JavaExec::class) {
+    group = "autotune"
+    description = "Reports accuracy and confusion for a model over labelled audio."
+    mainClass.set("dev.autotune.training.data.EvaluateModelKt")
+    classpath = sourceSets["main"].runtimeClasspath
+}

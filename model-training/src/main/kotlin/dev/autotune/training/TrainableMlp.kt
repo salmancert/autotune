@@ -43,6 +43,28 @@ class TrainableMlp(private val sizes: IntArray, seed: Int) {
 
     private var step = 0
 
+    /**
+     * Copies weights out of an already-trained model so training can continue
+     * from them.
+     *
+     * This is what makes fine-tuning on a couple of hours of real television
+     * viable at all: the synthetic corpus has already taught the network what
+     * the feature space means, and the real data only has to move the boundary.
+     * Trained from scratch, a corpus that size would simply be memorised.
+     */
+    fun warmStartFrom(model: dev.autotune.core.ml.Mlp) {
+        require(model.layers.size == layerCount) {
+            "warm start expects $layerCount layers, model has ${model.layers.size}"
+        }
+        model.layers.forEachIndexed { index, layer ->
+            require(layer.inputs == sizes[index] && layer.outputs == sizes[index + 1]) {
+                "layer $index shape ${layer.inputs}x${layer.outputs} does not match ${sizes[index]}x${sizes[index + 1]}"
+            }
+            layer.weights.copyInto(weights[index])
+            layer.bias.copyInto(biases[index])
+        }
+    }
+
     fun forward(input: FloatArray): FloatArray {
         input.copyInto(activations[0])
         for (l in 0 until layerCount) {

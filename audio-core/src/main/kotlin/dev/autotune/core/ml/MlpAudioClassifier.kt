@@ -41,11 +41,15 @@ class MlpAudioClassifier(
     companion object {
         const val BUNDLED_RESOURCE = "/dev/autotune/core/ml/speech_music_mlp.model"
 
-        /** Loads the model shipped inside the jar/apk. */
-        fun bundled(smoothing: Float = 0.25f): MlpAudioClassifier {
+        /** The weights shipped inside the jar/apk. */
+        fun bundledModel(): Mlp {
             val stream = MlpAudioClassifier::class.java.getResourceAsStream(BUNDLED_RESOURCE)
                 ?: error("bundled model $BUNDLED_RESOURCE is missing from the build")
-            return MlpAudioClassifier(ModelIo.read(stream), smoothing)
+            return ModelIo.read(stream)
         }
+
+        /** Loads the model shipped inside the jar/apk. */
+        fun bundled(smoothing: Float = 0.25f): MlpAudioClassifier =
+            MlpAudioClassifier(bundledModel(), smoothing)
     }
 }

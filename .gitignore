@@ -11,3 +11,6 @@ build/
 *.apk
 *.keystore
 !debug.keystore
+
+# Downloaded training audio stays out of git.
+/data/

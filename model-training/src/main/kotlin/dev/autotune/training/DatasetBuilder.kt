@@ -5,19 +5,36 @@ import dev.autotune.core.features.FeatureExtractor
 import dev.autotune.core.features.FeatureVector
 import dev.autotune.core.ml.AudioClass
 
-/** Feature rows with the clip each came from, so splits never leak across a clip. */
-class Dataset(
-    val features: MutableList<FloatArray> = mutableListOf(),
-    val labels: MutableList<Int> = mutableListOf(),
-    val clipIds: MutableList<Int> = mutableListOf(),
-) {
+/** Feature rows, with the group and source each came from. */
+class Dataset {
+    val features = mutableListOf<FloatArray>()
+    val labels = mutableListOf<Int>()
+    val groups = mutableListOf<String>()
+    val sources = mutableListOf<String>()
+
     val size: Int get() = features.size
 
-    fun add(feature: FloatArray, label: Int, clipId: Int) {
+    fun add(feature: FloatArray, label: Int, group: String, source: String) {
         features += feature
         labels += label
-        clipIds += clipId
+        groups += group
+        sources += source
     }
+
+    operator fun plusAssign(other: Dataset) {
+        features += other.features
+        labels += other.labels
+        groups += other.groups
+        sources += other.sources
+    }
+
+    fun classCounts(): IntArray {
+        val counts = IntArray(AudioClass.COUNT)
+        for (label in labels) counts[label]++
+        return counts
+    }
+
+    fun sourceCounts(): Map<String, Int> = sources.groupingBy { it }.eachCount()
 }
 
 object DatasetBuilder {
@@ -29,19 +46,22 @@ object DatasetBuilder {
      *
      * Frames are only kept once the context window is primed, and are decimated
      * so that neighbouring, near-identical windows do not dominate the loss.
+     *
+     * Takes a [Sequence] because real corpora are decoded lazily: a few hours of
+     * episodes will not fit in memory as PCM, but its feature rows will.
      */
     fun build(
-        clips: List<Clip>,
+        clips: Sequence<Clip>,
         format: AnalysisFormat = AnalysisFormat.DEFAULT,
         keepEvery: Int = 4,
     ): Dataset {
         val dataset = Dataset()
-        clips.forEachIndexed { clipId, clip ->
+        for (clip in clips) {
             val extractor = FeatureExtractor(format)
             var frame = 0
             extractor.process(clip.samples, 0, clip.samples.size) { _, features ->
                 if (extractor.isPrimed && frame % keepEvery == 0) {
-                    dataset.add(features.copyOf(FeatureVector.SIZE), clip.label.ordinal, clipId)
+                    dataset.add(features.copyOf(FeatureVector.SIZE), clip.label.ordinal, clip.groupId, clip.source)
                 }
                 frame++
             }
@@ -49,9 +69,8 @@ object DatasetBuilder {
         return dataset
     }
 
-    fun classCounts(dataset: Dataset): IntArray {
-        val counts = IntArray(AudioClass.COUNT)
-        for (label in dataset.labels) counts[label]++
-        return counts
-    }
+    fun build(clips: List<Clip>, format: AnalysisFormat = AnalysisFormat.DEFAULT, keepEvery: Int = 4): Dataset =
+        build(clips.asSequence(), format, keepEvery)
+
+    fun classCounts(dataset: Dataset): IntArray = dataset.classCounts()
 }

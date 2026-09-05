@@ -19,8 +19,22 @@ import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.random.Random
 
-/** One labelled training example. */
-class Clip(val samples: FloatArray, val label: AudioClass, val description: String)
+/**
+ * One labelled training example.
+ *
+ * [groupId] is what train/test splits are made on. Every segment cut from the
+ * same episode shares one, so two halves of the same scene can never end up on
+ * opposite sides of a split and flatter the accuracy.
+ */
+class Clip(
+    val samples: FloatArray,
+    val label: AudioClass,
+    val description: String,
+    val source: String = "synthetic",
+    val groupId: String = description,
+) {
+    fun withGroup(id: String): Clip = Clip(samples, label, description, source, id)
+}
 
 /**
  * A synthetic corpus of dialogue, score and effects.
@@ -47,7 +61,7 @@ class SyntheticCorpus(private val sampleRate: Int = 16_000) {
                 0 -> speechClip(random, length)
                 1 -> musicClip(random, length)
                 else -> effectsClip(random, length)
-            }
+            }.withGroup("synthetic-$seed-$index")
         }
     }
 
@@ -319,6 +333,103 @@ class SyntheticCorpus(private val sampleRate: Int = 16_000) {
         return out
     }
 
+    // ---------------------------------------------------- television drama
+
+    /**
+     * A sustained, percussion-free score bed: strings and reed-organ-like
+     * timbres holding chords under a scene.
+     *
+     * Television drama - Pakistani and Indian serials especially - runs an
+     * emotional score under almost every scene, and it is nothing like the
+     * drum-driven music generator above. It has no beat for the pulse feature to
+     * find and no gaps for the low-energy feature to find, which makes dialogue
+     * over it genuinely hard: both layers are continuous and harmonic. Without
+     * this in the corpus the model only ever learns "music has drums".
+     */
+    fun melodicBed(random: Random, length: Int): FloatArray {
+        val out = FloatArray(length)
+        val root = 45 + random.nextInt(12)
+        val scale = if (random.nextFloat() < 0.7f) MINOR else MAJOR
+        val voices = 2 + random.nextInt(3)
+
+        var position = 0
+        while (position < length) {
+            // Chords are held for seconds, not beats.
+            val chordLength = min((sampleRate * (1.8 + random.nextDouble() * 2.6)).toInt(), length - position)
+            if (chordLength <= 128) break
+            val degree = scale[random.nextInt(scale.size)]
+            for (voice in 0 until voices) {
+                val note = root + degree + INTERVALS[voice % INTERVALS.size]
+                val brightness = 0.55 + random.nextDouble() * 0.35
+                val samples = harmonicVoice(random, chordLength, midiToHz(note), harmonics = 12, brightness = brightness)
+                // Long crossfades: chords bleed into each other rather than
+                // starting and stopping.
+                val fade = (chordLength * 0.35).toInt()
+                for (i in 0 until fade) {
+                    val factor = i.toFloat() / fade
+                    samples[i] *= factor
+                    samples[chordLength - 1 - i] *= factor
+                }
+                for (i in samples.indices) out[position + i] += samples[i] * 0.3f
+            }
+            // Overlap the next chord so the bed never actually stops.
+            position += (chordLength * 0.7).toInt().coerceAtLeast(1)
+        }
+
+        if (random.nextFloat() < 0.5f) {
+            // A slow arpeggio or plucked figure over the pad, still unmetred.
+            var at = 0
+            while (at < length) {
+                val noteLength = min((sampleRate * (0.5 + random.nextDouble() * 0.9)).toInt(), length - at)
+                if (noteLength <= 64) break
+                val note = root + 12 + scale[random.nextInt(scale.size)]
+                val voice = harmonicVoice(random, noteLength, midiToHz(note), harmonics = 10, brightness = 0.9)
+                val decay = percussiveEnvelope(noteLength, sampleRate, 12f, 500f + random.nextFloat() * 700f)
+                for (i in voice.indices) out[at + i] += voice[i] * decay[i] * 0.35f
+                at += noteLength
+            }
+        }
+
+        reverberate(out, sampleRate, 0.15f + random.nextFloat() * 0.2f, random)
+        return out
+    }
+
+    /**
+     * The scene-transition sting: a swell into a loud held chord with a long
+     * tail, sometimes on a single hit. This is the thing that makes people reach
+     * for the volume control.
+     */
+    fun stinger(random: Random, length: Int): FloatArray {
+        val out = FloatArray(length)
+        val root = 40 + random.nextInt(10)
+        val hits = 1 + random.nextInt(2)
+        repeat(hits) { hit ->
+            val at = if (hit == 0) 0 else random.nextInt(max(1, length / 2))
+            val hitLength = min((sampleRate * (1.5 + random.nextDouble() * 2.0)).toInt(), length - at)
+            if (hitLength <= 256) return@repeat
+            for (interval in intArrayOf(0, 7, 12, 19)) {
+                val voice = harmonicVoice(random, hitLength, midiToHz(root + interval), harmonics = 14, brightness = 1.1)
+                // Fast swell in, slow decay out.
+                val attack = (hitLength * (0.02 + random.nextDouble() * 0.08)).toInt().coerceAtLeast(1)
+                for (i in 0 until hitLength) {
+                    val envelope = if (i < attack) {
+                        i.toFloat() / attack
+                    } else {
+                        exp(-(i - attack).toDouble() / (hitLength * 0.55)).toFloat()
+                    }
+                    out[at + i] += voice[i] * envelope * 0.35f
+                }
+            }
+            if (random.nextFloat() < 0.7f) {
+                val boom = lowPass(whiteNoise(random, hitLength), sampleRate, 160.0)
+                val envelope = percussiveEnvelope(hitLength, sampleRate, 5f, 300f)
+                for (i in 0 until hitLength) out[at + i] += boom[i] * envelope[i] * 0.5f
+            }
+        }
+        reverberate(out, sampleRate, 0.2f + random.nextFloat() * 0.25f, random)
+        return out
+    }
+
     // ------------------------------------------------- deliberately hard cases
 
     /**
@@ -521,8 +632,13 @@ class SyntheticCorpus(private val sampleRate: Int = 16_000) {
             roll < 0.20f -> description = "speech"
             roll < 0.55f -> {
                 // Dialogue over a score, mixed from comfortable down to barely
-                // above it. This is the case the whole app exists for.
-                val bed = if (random.nextBoolean()) music(random, length) else sparseMusic(random, length)
+                // above it. This is the case the whole app exists for, and on
+                // television the bed is usually sustained rather than rhythmic.
+                val bed = when (random.nextInt(3)) {
+                    0 -> music(random, length)
+                    1 -> sparseMusic(random, length)
+                    else -> melodicBed(random, length)
+                }
                 normalizeTo(bed, -20f - (3f + random.nextFloat() * 13f))
                 mixInto(speech, bed, 1f)
                 description = "speech+music"
@@ -570,11 +686,15 @@ class SyntheticCorpus(private val sampleRate: Int = 16_000) {
                 music = singing(random, length)
                 description = "vocals-only"
             }
-            roll < 0.83f -> {
+            roll < 0.73f -> {
                 // Sparse music has speech-like gaps; without it the model would
                 // decide that silence between events means dialogue.
                 music = sparseMusic(random, length)
                 description = "music-sparse"
+            }
+            roll < 0.83f -> {
+                music = if (random.nextBoolean()) melodicBed(random, length) else stinger(random, length)
+                description = "music-drama"
             }
             else -> {
                 music = music(random, length)
@@ -665,6 +785,8 @@ class SyntheticCorpus(private val sampleRate: Int = 16_000) {
         )
         val FORMANT_WEIGHTS = floatArrayOf(1f, 0.6f, 0.35f)
         val MAJOR = intArrayOf(0, 2, 4, 5, 7, 9, 11)
+        /** Root, third, fifth, octave, tenth - how a pad is usually voiced. */
+        val INTERVALS = intArrayOf(0, 7, 12, 4, 19)
         val MINOR = intArrayOf(0, 2, 3, 5, 7, 8, 10)
     }
 }
