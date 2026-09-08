@@ -536,6 +536,12 @@ is unit-testable on any JVM:
 ./gradlew :audio-core:test :model-training:test
 ```
 
+Without an Android SDK the app module cannot be compiled at all. `tools/check-app-sources.sh`
+runs the Kotlin compiler over it with only the stdlib on the classpath and reports
+what is genuinely wrong: everything from `android.*` is unresolved and ignored, but
+an unresolved reference to one of *this* project's types - a missing import, say -
+is reported. It is not a substitute for the real build, which CI does.
+
 `settings.gradle.kts` leaves `:app` out of the build entirely when no Android SDK is
 configured, which is why the core tests run in CI without one.
 

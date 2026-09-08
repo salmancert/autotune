@@ -16,10 +16,10 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Process
-import java.util.Locale
 import android.util.Log
 import dev.autotune.core.engine.AppProfile
 import dev.autotune.core.engine.StabilizerEngine
+import dev.autotune.core.engine.StabilizerState
 import dev.autotune.core.features.AnalysisFormat
 import dev.autotune.tv.R
 import dev.autotune.tv.capture.AnalysisSource
@@ -30,6 +30,7 @@ import dev.autotune.tv.effects.OutputProcessorFactory
 import dev.autotune.tv.session.PlaybackMonitor
 import dev.autotune.tv.settings.SettingsRepository
 import dev.autotune.tv.ui.MainActivity
+import java.util.Locale
 import kotlin.math.pow
 
 /**
