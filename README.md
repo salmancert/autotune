@@ -221,13 +221,24 @@ tools/build-apk.sh                        # just build
 tools/build-apk.sh --install 192.168.1.50 # build, connect to the TV, install, launch
 ```
 
-It needs Java 17+ (`sudo apt install openjdk-17-jdk`), `curl` and `unzip`, and
-puts the SDK under `~/Android/Sdk` — nothing system-wide, no root. The first run
-downloads a few hundred MB of SDK; later runs take seconds.
+It needs **Java 17 or 21** (`sudo apt install openjdk-17-jdk`), `curl` and
+`unzip`, and puts the SDK under `~/Android/Sdk` — nothing system-wide, no root.
+The first run downloads a few hundred MB of SDK; later runs take seconds. If
+several JDKs are installed it finds a supported one and uses it, whatever `java`
+on your `PATH` happens to be.
+
+**A newer JDK will not do.** The Android Gradle Plugin 8.7.3 targets 17 and
+Kotlin 2.0.21 cannot emit for JVM targets newer than itself, so on Java 24+ the
+build fails with a bare version number for an error message. `settings.gradle.kts`
+checks for this and explains it rather than letting that happen.
 
 Doing it by hand comes to the same thing:
 
 ```bash
+# 0. Java 17 or 21 - NOT newer (see above)
+sudo apt install openjdk-17-jdk
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+
 # 1. SDK (skip if you already have one; just set ANDROID_HOME)
 mkdir -p ~/Android/Sdk/cmdline-tools && cd ~/Android/Sdk/cmdline-tools
 curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip

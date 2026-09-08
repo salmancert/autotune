@@ -33,16 +33,67 @@ die() { printf '\033[31merror: %s\033[0m\n' "$1" >&2; exit 1; }
 
 # ---------------------------------------------------------------- java check
 
-command -v java >/dev/null 2>&1 || die "Java is not installed.
-  Debian/Ubuntu:  sudo apt install openjdk-17-jdk
-  Fedora:         sudo dnf install java-17-openjdk-devel
-  Arch:           sudo pacman -S jdk17-openjdk"
+# The build runs on whatever JVM launches Gradle. Too new is as broken as too
+# old, and fails less legibly: AGP 8.7.3 targets 17 and Kotlin 2.0.21 cannot
+# emit for JVM targets newer than itself, so a JDK 24+ build dies with a bare
+# version number for an error message.
+JAVA_MIN=17
+JAVA_MAX=21
 
-JAVA_MAJOR="$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/')"
-if [ "${JAVA_MAJOR:-0}" -lt 17 ]; then
-    die "Java 17 or newer is required (found $JAVA_MAJOR). The Android Gradle Plugin will not run on anything older."
+java_major_of() {
+    # $1 is a JDK home; echoes its major version, or nothing if unusable.
+    # Matches the version line wherever it appears: a JVM with JAVA_TOOL_OPTIONS
+    # or _JAVA_OPTIONS set prints a notice first, so the first line is not
+    # reliably the one with the version in it.
+    local candidate="$1/bin/java"
+    [ -x "$candidate" ] || return 0
+    "$candidate" -version 2>&1 | sed -nE 's/.*[[:space:]]version "([0-9]+).*/\1/p' | head -1
+}
+
+find_supported_jdk() {
+    local home major
+    for home in \
+        "${JAVA_HOME:-}" \
+        /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-21-openjdk-* \
+        /usr/lib/jvm/temurin-17-* /usr/lib/jvm/temurin-21-* \
+        /usr/lib/jvm/*17* /usr/lib/jvm/*21* \
+        "$HOME"/.sdkman/candidates/java/17* "$HOME"/.sdkman/candidates/java/21* \
+        /usr/java/* /opt/java/*
+    do
+        [ -d "$home" ] || continue
+        major="$(java_major_of "$home")"
+        [ -n "$major" ] || continue
+        if [ "$major" -ge "$JAVA_MIN" ] && [ "$major" -le "$JAVA_MAX" ]; then
+            echo "$home"
+            return 0
+        fi
+    done
+    return 1
+}
+
+SUPPORTED_JDK="$(find_supported_jdk || true)"
+
+if [ -z "$SUPPORTED_JDK" ]; then
+    CURRENT="$(command -v java >/dev/null 2>&1 &&
+        java -version 2>&1 | sed -nE 's/.*[[:space:]]version "([0-9.]+).*/\1/p' | head -1 ||
+        echo 'not installed')"
+    die "no Java between $JAVA_MIN and $JAVA_MAX was found.
+  currently on PATH: $CURRENT
+
+  Java 17 is what CI builds with. Install it:
+    Debian/Ubuntu:  sudo apt install openjdk-17-jdk
+    Fedora:         sudo dnf install java-17-openjdk-devel
+    Arch:           sudo pacman -S jdk17-openjdk
+
+  A newer JDK will not do: the Android Gradle Plugin and Kotlin in this build
+  are older than it, and fail confusingly rather than clearly."
 fi
-say "Java $JAVA_MAJOR"
+
+# Exported so the Gradle daemon starts on this JVM rather than whatever is on
+# PATH. A daemon already running on a different JVM is not reused.
+export JAVA_HOME="$SUPPORTED_JDK"
+export PATH="$JAVA_HOME/bin:$PATH"
+say "Java $(java_major_of "$JAVA_HOME") at $JAVA_HOME"
 
 # ------------------------------------------------------------------ sdk setup
 
