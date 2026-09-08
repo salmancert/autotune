@@ -49,6 +49,16 @@ class SettingsRepository(context: Context) {
         get() = preferences.getBoolean(KEY_MICROPHONE, false)
         set(value) = preferences.edit { putBoolean(KEY_MICROPHONE, value) }
 
+    /**
+     * Take over the TV's volume control instead of relying on an audio effect.
+     *
+     * Needed when the TV passes audio through to a soundbar or receiver, where
+     * an effect on the output mix attaches successfully and does nothing.
+     */
+    var useVolumeControl: Boolean
+        get() = preferences.getBoolean(KEY_VOLUME_CONTROL, false)
+        set(value) = preferences.edit { putBoolean(KEY_VOLUME_CONTROL, value) }
+
     var perAppProfiles: Boolean
         get() = preferences.getBoolean(KEY_PER_APP, true)
         set(value) = preferences.edit { putBoolean(KEY_PER_APP, value) }
@@ -79,5 +89,6 @@ class SettingsRepository(context: Context) {
         const val KEY_MUSIC_OFFSET = "musicOffset"
         const val KEY_MICROPHONE = "microphoneFallback"
         const val KEY_PER_APP = "perAppProfiles"
+        const val KEY_VOLUME_CONTROL = "useVolumeControl"
     }
 }

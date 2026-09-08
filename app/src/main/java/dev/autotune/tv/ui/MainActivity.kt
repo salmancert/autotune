@@ -14,6 +14,7 @@ import dev.autotune.core.engine.ListeningPreset
 import dev.autotune.tv.R
 import dev.autotune.tv.capture.AnalysisSourceFactory
 import dev.autotune.tv.databinding.ActivityMainBinding
+import dev.autotune.tv.effects.StreamVolumeOutput
 import dev.autotune.tv.databinding.ViewSettingRowBinding
 import dev.autotune.tv.service.StabilizerService
 import dev.autotune.tv.service.StabilizerServiceController
@@ -131,6 +132,12 @@ class MainActivity : AppCompatActivity() {
             refreshRows()
         }
 
+        binding.rowVolumeControl.onSelect {
+            settings.useVolumeControl = !settings.useVolumeControl
+            StabilizerServiceController.start(this, userInitiated = true)
+            refreshRows()
+        }
+
         binding.rowBoot.onSelect {
             settings.startOnBoot = !settings.startOnBoot
             refreshRows()
@@ -184,6 +191,14 @@ class MainActivity : AppCompatActivity() {
         binding.rowMicrophone.set(
             getString(R.string.action_use_microphone),
             if (settings.allowMicrophoneFallback) "On - ${getString(R.string.hint_microphone)}" else "Off",
+        )
+        binding.rowVolumeControl.set(
+            getString(R.string.action_volume_control),
+            when {
+                StreamVolumeOutput.isVolumeFixed(this) -> getString(R.string.warn_volume_fixed)
+                settings.useVolumeControl -> "On - ${getString(R.string.hint_volume_control)}"
+                else -> getString(R.string.hint_volume_control)
+            },
         )
         binding.rowBoot.set(
             getString(R.string.action_start_on_boot),

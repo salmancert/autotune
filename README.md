@@ -117,23 +117,50 @@ bring everything back.
 ## Prior art
 
 Someone pointed me at [Auto Volume Control for TV](https://play.google.com/store/apps/details?id=purpose.company.smartvolumestabilizer)
-(`purpose.company.smartvolumestabilizer`) as an app in this space. The Play listing
-itself was not reachable from where this was built, so what follows is second-hand,
-from a search index, and paraphrased rather than quoted: it describes real-time
-stabilisation across the major streaming apps, preventing spikes during action
-scenes, commercials and sport, boosting quiet dialogue, and offering preset modes
-along the lines of Movies, Sports, Late Night, News and Custom.
+(`purpose.company.smartvolumestabilizer`) as an app in this space, and later
+supplied a copy of it, so what follows is from the artifact rather than from its
+store listing. I read its manifest, permissions, declared components, resources
+and the Android APIs it references — the observable capability surface. Its
+implementation was not decompiled and no code was copied.
 
-Two ideas were worth taking, and both are implemented above: **named genre presets**
-instead of raw sliders, and treating **loud commercials** as a problem distinct from
-loud moments. The bypass A/B and the relative per-app profiles are not from there —
-those came from wanting the app to be checkable and its presets to survive contact
-with a per-app profile. No code was copied; nothing above was reverse-engineered.
+**How it solves the DRM problem, which is the interesting part.** It does not
+capture app audio at all. Version 0.1.1 declares exactly one foreground service
+type — `microphone` (`0x80`) — requests `RECORD_AUDIO` and `MODIFY_AUDIO_SETTINGS`,
+and references no `AudioPlaybackCaptureConfiguration` and no `Visualizer`. It
+listens to the room, and it acts by moving the TV's own volume:
+`setStreamVolume` / `adjustStreamVolume`, with `LoudnessEnhancer` as the only
+audio effect. Two `AccessibilityService`s handle remote key bindings; a
+`SYSTEM_ALERT_WINDOW` overlay shows the level over the video.
+
+That is why it works with Netflix: a microphone hears everything a speaker plays,
+and the volume control affects everything. It confirms rather than contradicts the
+conclusion in [Platform reality](#platform-reality) — per-app capture of a
+protected stream is not available to anyone.
+
+Its control law is coarser than the one here: the strings describe a default
+level, an increase level for quiet scenes and a decrease level for loud ones,
+with low/medium/high sensitivity — three volume positions driven by a decibel
+meter, rather than a loudness target with speech/music classification. It also
+declares no `BOOT_COMPLETED` receiver, so it does not come back on its own after
+the TV restarts.
+
+**Correction to what this file said earlier.** A previous version of this section
+described genre presets (Movies, Sports, Late Night, News, Custom) taken from a
+search summary of the store listing. Those do not appear anywhere in this build's
+resources; the closest thing is the three-position sensitivity setting. The
+[presets](#presets) here are worth having on their own merits, but they should not
+be credited to that app.
+
+**What was actually worth taking:** the insight that an audio effect is not always
+enough, and that driving the system volume is the fallback that always does
+something. That is implemented here as a third output stage — see below.
 
 ## Platform reality
 
 Android does not let an app read another app's audio just because it would be
 useful. This is the single most important thing to understand before installing.
+
+**Input** — where the analysis audio comes from:
 
 | Analysis source | Sees | Needs | Works with |
 |---|---|---|---|
@@ -142,13 +169,33 @@ useful. This is the single most important thing to understand before installing.
 | **Microphone** | The room | `RECORD_AUDIO`, a device with a mic | Anything, at the cost of room acoustics |
 | *(none)* | — | — | Fixed dialogue preset, still running |
 
+**Output** — how the correction is applied:
+
+| Output stage | Quality | Fails when |
+|---|---|---|
+| **DynamicsProcessing** | Per-band compression, limiter, EQ | Not on API < 28, or the device refuses session 0 |
+| **LoudnessEnhancer** | Broadband gain around a standing boost | Same, minus the compressor |
+| **TV volume** | Coarse steps, visible on screen | The device reports `isVolumeFixed` |
+
+The last row exists because of something worth being blunt about: on a TV that
+passes audio through to a soundbar or AV receiver over HDMI, an effect on the
+output mix can attach, report success, and be completely inaudible — the mix it
+is processing is not the one being decoded. Nothing in the API says so. If
+Autotune appears to do nothing on such a setup, turn on **Adjust the TV volume
+directly**, which drives the same control the remote does.
+
+That path is coarse (a step is a couple of dB, unevenly spaced) and it moves a
+control you also own, so it yields: reach for the remote and your new level
+becomes the baseline that corrections ride on, rather than something to argue
+with.
+
 Netflix, Prime Video and Disney+ set `ALLOW_CAPTURE_BY_NONE` on their audio. No app
 can capture it — that is the platform enforcing their choice, not a bug to work
 around.
 
-**But the output processing still applies to them.** The compressor, the dialogue
-EQ and the limiter attach to the global output mix, so on a locked-down streaming
-app Autotune runs its fixed dialogue-forward preset: the multiband compressor pulls
+**But the output processing usually still applies to them.** The compressor, the
+dialogue EQ and the limiter attach to the global output mix, so on a locked-down
+streaming app Autotune runs its fixed dialogue-forward preset: the multiband compressor pulls
 loud low-frequency content down and the presence band keeps consonants up. That is
 static rather than adaptive — good, not as good. To get the adaptive path on those
 apps you need either a device with a microphone (enable the fallback in settings) or
@@ -272,6 +319,9 @@ Everything is on the main screen; left/right on the remote adjusts a value.
   will ever touch.
 - **Compare with it off** — fades the whole chain out so you can hear the
   difference, and back in when you press it again.
+- **Adjust the TV volume directly** — off by default. Turn it on if the sound is
+  unchanged with everything else configured, which usually means HDMI passthrough
+  to external speakers.
 - **Use microphone as fallback** — off by default. Turn it on if you mostly watch
   apps that block capture and your device has a microphone. Autotune subtracts its
   own applied gain back out of what the mic hears, so the loop does not chase

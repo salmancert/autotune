@@ -22,6 +22,9 @@
     <string name="action_grant_notifications">Grant app detection</string>
     <string name="action_use_microphone">Use microphone as fallback</string>
     <string name="action_start_on_boot">Start when the TV starts</string>
+    <string name="action_volume_control">Adjust the TV volume directly</string>
+    <string name="hint_volume_control">For soundbars and receivers, where audio effects have no effect. Coarser, and you will see the volume move.</string>
+    <string name="warn_volume_fixed">This device reports a fixed output volume, so neither effects nor volume control may do anything.</string>
 
     <string name="hint_strength">How hard the stabiliser corrects. Lower it if the sound feels squashed.</string>
     <string name="hint_dialogue_target">Where speech should sit. Raise it if dialogue is still too quiet.</string>

@@ -61,6 +61,8 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     @Volatile
     private var analysing = false
 
+    private var usingVolumeControl = false
+
     private val format = AnalysisFormat.DEFAULT
 
     private val projectionCallback = object : MediaProjection.Callback() {
@@ -161,7 +163,11 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
 
     private fun attachProcessor() {
         if (processor != null) return
-        val created = OutputProcessorFactory.create(settings.toConfig())
+        val created = OutputProcessorFactory.create(
+            config = settings.toConfig(),
+            context = this,
+            preferVolumeControl = settings.useVolumeControl,
+        )
         processor = created
         // Until analysis is up, the fixed preset is what the user actually hears.
         created?.applyStaticPreset(settings.toConfig())
@@ -454,6 +460,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 processor = null
                 stopSelf()
             } else {
+                // The output stage itself can change with the settings, so drop
+                // and re-create it rather than reconfiguring the wrong one.
+                if (usingVolumeControl != settings.useVolumeControl) {
+                    usingVolumeControl = settings.useVolumeControl
+                    processor?.close()
+                    processor = null
+                }
                 attachProcessor()
                 if (!analysing) startAnalysis(userInitiated = false)
                 if (source == null) processor?.applyStaticPreset(config)

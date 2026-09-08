@@ -80,6 +80,10 @@
             layout="@layout/view_setting_row" />
 
         <include
+            android:id="@+id/rowVolumeControl"
+            layout="@layout/view_setting_row" />
+
+        <include
             android:id="@+id/rowBoot"
             layout="@layout/view_setting_row" />
 
