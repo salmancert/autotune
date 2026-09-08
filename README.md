@@ -259,11 +259,23 @@ with the standard debug key, which is fine for sideloading onto your own TV.
 
 ### Getting it onto the TV
 
-1. On the TV: **Settings → Device Preferences → About**, click **Build** seven
-   times, then **Settings → Device Preferences → Developer options → ADB
-   debugging** (called *USB debugging* on some builds) → on.
-2. Find its address under **Settings → Network → your network → IP address**.
-3. From the Linux box:
+1. On the TV: **Settings → Device Preferences → About**, scroll to the bottom
+   and press OK seven times on the build row. **The row is not always called
+   "Build"** — that is the usual reason people cannot find it:
+
+   | TV | Row to press seven times |
+   |---|---|
+   | TCL, and most Android TV 11 | **Android TV OS build** |
+   | Sony, Nvidia Shield, Xiaomi | **Build** |
+   | Google TV skin (Settings → System → About) | **Android TV OS build** |
+
+2. Then **Settings → Device Preferences → Developer options → USB debugging** →
+   on. That is enough on its own; it opens ADB on port 5555 and no separate
+   "network debugging" toggle is needed on most sets.
+3. Find the TV's address under **Settings → Network & Internet → your network →
+   IP address**.
+4. From the Linux box — the TV shows an authorisation prompt on the first
+   connection, and you have to accept it there:
 
 ```bash
 adb connect 192.168.1.50:5555      # accept the prompt that appears on the TV
