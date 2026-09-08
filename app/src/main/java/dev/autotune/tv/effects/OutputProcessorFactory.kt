@@ -27,14 +27,20 @@ object OutputProcessorFactory {
     ): AudioOutputProcessor? {
         if (preferVolumeControl) {
             StreamVolumeOutput.create(context)?.let {
-                Log.i(TAG, "using the TV volume control at the user's request")
+                Log.i(TAG, "attached: ${it.label} (at the user's request)")
                 return it
             }
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            DynamicsProcessorEffect.create(config)?.let { return it }
+            DynamicsProcessorEffect.create(config)?.let {
+                Log.i(TAG, "attached: ${it.label}")
+                return it
+            }
         }
-        LoudnessEnhancerEffect.create()?.let { return it }
+        LoudnessEnhancerEffect.create()?.let {
+            Log.i(TAG, "attached: ${it.label}")
+            return it
+        }
 
         Log.i(TAG, "no audio effect could attach; falling back to the volume control")
         return StreamVolumeOutput.create(context)

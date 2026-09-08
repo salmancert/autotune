@@ -16,6 +16,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Process
+import java.util.Locale
 import android.util.Log
 import dev.autotune.core.engine.AppProfile
 import dev.autotune.core.engine.StabilizerEngine
@@ -234,6 +235,10 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 StabilizerStatusBus.publishState(state)
                 lastStatusUpdate = now
             }
+            if (now - lastMeterLog >= METER_LOG_INTERVAL_MS) {
+                lastMeterLog = now
+                logMeter(active, state)
+            }
             if (now - lastNotificationUpdate >= NOTIFICATION_INTERVAL_MS) {
                 updateNotification()
                 monitor.refresh()
@@ -241,6 +246,36 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             }
         }
         handler?.post(::analysisLoop)
+    }
+
+    /**
+     * Mirrors the on-screen meter into logcat.
+     *
+     * The meter only exists inside the app, and on a TV opening the app pauses
+     * whatever you were watching - so the one moment you most want to see the
+     * numbers is the one moment you cannot. This is off unless asked for:
+     *
+     *     adb shell setprop log.tag.AutotuneMeter DEBUG
+     *     adb logcat -s AutotuneMeter
+     */
+    private fun logMeter(source: AnalysisSource, state: StabilizerState) {
+        if (!Log.isLoggable(METER_TAG, Log.DEBUG)) return
+        Log.d(
+            METER_TAG,
+            String.format(
+                Locale.ROOT,
+                "%-14s %-8s dialogue %3.0f%% music %3.0f%% effects %3.0f%%  %6.1f LUFS  gain %+5.1f dB%s%s",
+                source.label,
+                state.dominantClass.name.lowercase(),
+                state.speechProbability * 100f,
+                state.musicProbability * 100f,
+                state.effectsProbability * 100f,
+                state.momentaryLufs,
+                state.gainDb,
+                if (state.sustainedTrimDb < -0.5f) " trim %.1f".format(Locale.ROOT, state.sustainedTrimDb) else "",
+                if (state.bypassed) "  [bypassed]" else "",
+            ),
+        )
     }
 
     /**
@@ -480,6 +515,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     private var lastEffectUpdate = 0L
     private var lastStatusUpdate = 0L
     private var lastNotificationUpdate = 0L
+    private var lastMeterLog = 0L
 
     companion object {
         private const val TAG = "StabilizerService"
@@ -488,6 +524,8 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
 
         private const val RETRY_DELAY_MS = 5_000L
         private const val STATUS_INTERVAL_MS = 100L
+        private const val METER_LOG_INTERVAL_MS = 1_000L
+        private const val METER_TAG = "AutotuneMeter"
         private const val NOTIFICATION_INTERVAL_MS = 5_000L
 
         /** Long enough for the engine's 250 ms unity fade to land. */
