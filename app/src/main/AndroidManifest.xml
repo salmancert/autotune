@@ -85,6 +85,20 @@
             </intent-filter>
         </service>
 
+        <!--
+            Exported so `adb shell am broadcast` can reach it. It only writes a
+            state summary to logcat - it reads nothing private and changes
+            nothing.
+        -->
+        <receiver
+            android:name=".diag.DiagnosticsReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.autotune.tv.DIAGNOSE" />
+            </intent-filter>
+        </receiver>
+
         <receiver
             android:name=".boot.BootReceiver"
             android:enabled="true"
