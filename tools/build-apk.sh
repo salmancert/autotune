@@ -172,21 +172,37 @@ fi
 
 PACKAGE=dev.autotune.tv
 
-say "Installing"
-INSTALL_OUTPUT="$("$ADB" install -r "$APK" 2>&1)" || true
+# Install for the user that is actually on screen.
+#
+# A TV can carry more than one user - a second profile it never boots into is
+# common - and `adb install` does not necessarily pick the running one. Install
+# to the wrong user and everything looks contradictory: dumpsys lists the
+# package and its launcher activity, while monkey, am start and the TV's own app
+# list all report nothing, because they ask about the current user.
+CURRENT_USER="$("$ADB" shell am get-current-user 2>/dev/null | tr -d '\r' | head -1)"
+case "$CURRENT_USER" in
+    ''|*[!0-9]*) CURRENT_USER=0 ;;
+esac
+
+say "Installing for user $CURRENT_USER"
+INSTALL_OUTPUT="$("$ADB" install -r --user "$CURRENT_USER" "$APK" 2>&1)" || true
 echo "$INSTALL_OUTPUT"
 
 # adb reports trouble in its output at least as often as in its exit code, and a
 # package that is simply absent produces the same "Activity class does not
 # exist" error as a genuinely broken launcher entry. Confirm the package is
-# really on the device before claiming anything.
-if ! "$ADB" shell pm list packages 2>/dev/null | tr -d '\r' | grep -qx "package:$PACKAGE"; then
-    die "the install did not take - $PACKAGE is not on the device.
+# really there, for the user that matters, before claiming anything.
+if ! "$ADB" shell pm list packages --user "$CURRENT_USER" 2>/dev/null | tr -d '\r' | grep -qx "package:$PACKAGE"; then
+    die "the install did not take - $PACKAGE is not installed for user $CURRENT_USER.
   adb said: ${INSTALL_OUTPUT:-(nothing)}
 
   If that mentions INSTALL_FAILED_UPDATE_INCOMPATIBLE, an older copy signed with
   a different key is in the way:
-    $ADB uninstall $PACKAGE"
+    $ADB uninstall $PACKAGE
+
+  If it is installed for some other user, hand it to this one without
+  re-pushing the APK:
+    $ADB shell pm install-existing --user $CURRENT_USER $PACKAGE"
 fi
 
 say "Launching"
