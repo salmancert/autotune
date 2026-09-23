@@ -42,6 +42,20 @@ import java.util.Locale
 class DiagnosticsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == ACTION_TEST_TONE) {
+            // onReceive runs on the main thread; playing four seconds of audio
+            // on it would be an ANR.
+            val finish = goAsync()
+            Thread {
+                runCatching {
+                    Log.i(TAG, TestTone.describe(context.getSystemService(AudioManager::class.java)))
+                    TestTone.play()
+                }
+                finish.finish()
+            }.start()
+            return
+        }
+
         // Anything in here that throws would otherwise leave no trace at all:
         // the broadcast still reports "completed", and the absence of output
         // looks exactly like the receiver never running.
@@ -168,6 +182,7 @@ class DiagnosticsReceiver : BroadcastReceiver() {
     private companion object {
         const val TAG = "AutotuneDiag"
         const val FILE_NAME = "diagnostics.txt"
+        const val ACTION_TEST_TONE = "dev.autotune.tv.TEST_TONE"
 
         /** Grace period before silence is taken to mean something. */
         const val SETTLE_MS = 5_000L

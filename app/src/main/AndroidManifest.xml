@@ -96,6 +96,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="dev.autotune.tv.DIAGNOSE" />
+                <action android:name="dev.autotune.tv.TEST_TONE" />
             </intent-filter>
         </receiver>
 
