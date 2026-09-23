@@ -319,6 +319,26 @@ a different key is installed — `adb uninstall dev.autotune.tv` first.
 `device unauthorized` means the confirmation dialog on the TV has not been accepted
 yet. `adb: no devices` after a TV reboot just needs `adb connect` again.
 
+**Installed, but the TV cannot see it and `monkey` says *No activities found*.**
+A TV can carry a second user profile it never boots into, and `adb install` does
+not always choose the running one. The symptom is contradictory on purpose:
+`dumpsys` lists the package *and* its launcher activity, so the manifest looks
+right, while `monkey`, `am start` and the app list all report nothing, because
+they ask about the current user. Check which user has it:
+
+```bash
+adb shell dumpsys package dev.autotune.tv | sed -n '/User /,/^$/p'   # installed= per user
+adb shell am get-current-user
+```
+
+Hand it to the right user without re-pushing the APK:
+
+```bash
+adb shell pm install-existing --user 0 dev.autotune.tv
+```
+
+`tools/build-apk.sh` installs for the current user, so it does not hit this.
+
 To watch it work:
 
 ```bash
