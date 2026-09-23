@@ -18,8 +18,14 @@ import java.util.Locale
 /**
  * Dumps everything needed to tell why the app is not doing what was expected:
  *
- *     adb shell am broadcast -a dev.autotune.tv.DIAGNOSE
+ *     adb shell am broadcast -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
  *     adb logcat -d -s AutotuneDiag
+ *
+ * `--include-stopped-packages` is not optional. Android drops broadcasts to an
+ * app in the stopped state, which is where every app sits after `adb install`
+ * until something launches it - so without the flag the one case this is most
+ * needed for, "it is installed and has never run", reports nothing at all and
+ * looks identical to the app not being installed.
  *
  * "I can't hear a difference" has half a dozen causes that look identical from
  * the sofa - capture never granted, the effect refusing to attach, the TV

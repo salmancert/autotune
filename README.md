@@ -82,6 +82,32 @@ and runs the whole chain over it:
 Dialogue came up 9.7 dB, music came down 9.0 dB. Both directions matter: turning
 everything down would have "fixed" the gap without making the dialogue audible.
 
+## Diagnosing it on the TV
+
+When it is installed but seems to do nothing, this reports the whole state in
+one go rather than leaving you to guess which of half a dozen causes it is:
+
+```bash
+adb shell am broadcast -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
+adb logcat -d -s AutotuneDiag
+```
+
+`--include-stopped-packages` matters: Android drops broadcasts to an app in the
+stopped state, which is where an app sits after `adb install` until it is
+launched once. Without the flag you get silence, which looks exactly like the
+app not being installed.
+
+It prints the running state, which analysis source and output stage attached,
+permissions, the media volume and whether the device calls it fixed, the live
+meter, and a verdict line naming the most likely cause.
+
+For a running commentary instead of a snapshot:
+
+```bash
+adb shell setprop log.tag.AutotuneMeter DEBUG
+adb logcat -s AutotuneMeter
+```
+
 ## Presets
 
 The three sliders are a fine way to express *how* the stabiliser should behave and
