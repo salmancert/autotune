@@ -170,12 +170,38 @@ if [ -z "$("$ADB" devices | sed '1d' | grep -w device || true)" ]; then
     die "no device is connected. Run: $ADB connect <tv-ip>:5555"
 fi
 
+PACKAGE=dev.autotune.tv
+
 say "Installing"
-"$ADB" install -r "$APK"
+INSTALL_OUTPUT="$("$ADB" install -r "$APK" 2>&1)" || true
+echo "$INSTALL_OUTPUT"
+
+# adb reports trouble in its output at least as often as in its exit code, and a
+# package that is simply absent produces the same "Activity class does not
+# exist" error as a genuinely broken launcher entry. Confirm the package is
+# really on the device before claiming anything.
+if ! "$ADB" shell pm list packages 2>/dev/null | tr -d '\r' | grep -qx "package:$PACKAGE"; then
+    die "the install did not take - $PACKAGE is not on the device.
+  adb said: ${INSTALL_OUTPUT:-(nothing)}
+
+  If that mentions INSTALL_FAILED_UPDATE_INCOMPATIBLE, an older copy signed with
+  a different key is in the way:
+    $ADB uninstall $PACKAGE"
+fi
 
 say "Launching"
-"$ADB" shell monkey -p dev.autotune.tv -c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1 ||
-    "$ADB" shell am start -n dev.autotune.tv/.ui.MainActivity
+LAUNCH_OUTPUT="$("$ADB" shell monkey -p "$PACKAGE" -c android.intent.category.LEANBACK_LAUNCHER 1 2>&1 | tr -d '\r')"
+if ! grep -q "Events injected: 1" <<<"$LAUNCH_OUTPUT"; then
+    LAUNCH_OUTPUT="$("$ADB" shell am start -n "$PACKAGE/.ui.MainActivity" 2>&1 | tr -d '\r')"
+fi
+if grep -qi "error" <<<"$LAUNCH_OUTPUT"; then
+    echo "$LAUNCH_OUTPUT"
+    die "the package is installed but its activity would not start.
+
+  See what the installed package actually contains:
+    $ADB shell dumpsys package $PACKAGE | grep -A10 'Activity Resolver Table'
+    $ADB shell cmd package resolve-activity --brief $PACKAGE"
+fi
 
 cat <<EOF
 
