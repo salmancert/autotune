@@ -13,6 +13,7 @@ import dev.autotune.tv.capture.AnalysisSourceFactory
 import dev.autotune.tv.service.StabilizerStatusBus
 import dev.autotune.tv.session.PlaybackMonitor
 import dev.autotune.tv.settings.SettingsRepository
+import java.io.File
 import java.util.Locale
 
 /**
@@ -35,12 +36,34 @@ import java.util.Locale
 class DiagnosticsReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Anything in here that throws would otherwise leave no trace at all:
+        // the broadcast still reports "completed", and the absence of output
+        // looks exactly like the receiver never running.
+        val report = runCatching { buildReport(context) }.getOrElse { error ->
+            "=== Autotune diagnostics failed ===\n" + error.stackTraceToString()
+        }
+
+        // Line by line: logcat truncates long single messages.
+        report.lineSequence().forEach { Log.i(TAG, it) }
+
+        // Also written to a file, because logcat is not always readable - some
+        // TV firmware drops third-party output, and a filtered logcat that shows
+        // nothing is indistinguishable from a receiver that never fired:
+        //   adb shell cat /sdcard/Android/data/dev.autotune.tv/files/diagnostics.txt
+        runCatching {
+            val target = File(context.getExternalFilesDir(null), FILE_NAME)
+            target.writeText(report)
+            Log.i(TAG, "written to ${target.absolutePath}")
+        }.onFailure { Log.w(TAG, "could not write the report to a file", it) }
+    }
+
+    private fun buildReport(context: Context): String {
         val settings = SettingsRepository(context)
         val status = StabilizerStatusBus.status.value
         val audio = context.getSystemService(AudioManager::class.java)
         val state = status.state
 
-        val report = buildString {
+        return buildString {
             appendLine("=== Autotune diagnostics ===")
             appendLine("device        ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine()
@@ -87,9 +110,6 @@ class DiagnosticsReceiver : BroadcastReceiver() {
             appendLine()
             append(verdict(status.running, status.sourceLabel, status.processorLabel, audio))
         }
-
-        // Line by line: logcat truncates long single messages.
-        report.lineSequence().forEach { Log.i(TAG, it) }
     }
 
     /** The one sentence worth reading first. */
@@ -120,5 +140,6 @@ class DiagnosticsReceiver : BroadcastReceiver() {
 
     private companion object {
         const val TAG = "AutotuneDiag"
+        const val FILE_NAME = "diagnostics.txt"
     }
 }

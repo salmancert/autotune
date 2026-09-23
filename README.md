@@ -90,6 +90,9 @@ one go rather than leaving you to guess which of half a dozen causes it is:
 ```bash
 adb shell am broadcast -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
 adb logcat -d -s AutotuneDiag
+
+# or, if logcat shows nothing - some TV firmware drops third-party output:
+adb shell cat /sdcard/Android/data/dev.autotune.tv/files/diagnostics.txt
 ```
 
 `--include-stopped-packages` matters: Android drops broadcasts to an app in the
