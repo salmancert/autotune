@@ -188,17 +188,31 @@ say "Installing for user $CURRENT_USER"
 INSTALL_OUTPUT="$("$ADB" install -r --user "$CURRENT_USER" "$APK" 2>&1)" || true
 echo "$INSTALL_OUTPUT"
 
-# adb reports trouble in its output at least as often as in its exit code, and a
-# package that is simply absent produces the same "Activity class does not
-# exist" error as a genuinely broken launcher entry. Confirm the package is
-# really there, for the user that matters, before claiming anything.
-if ! "$ADB" shell pm list packages --user "$CURRENT_USER" 2>/dev/null | tr -d '\r' | grep -qx "package:$PACKAGE"; then
+# Confirm the package really is there, for the user that matters, before
+# claiming anything - adb reports trouble in its output at least as often as in
+# its exit code.
+#
+# Asked via dumpsys rather than `pm list packages --user`, which needs a
+# permission the shell does not reliably hold and fails to empty output rather
+# than to an error. Believing that emptiness turns a successful install into a
+# reported failure.
+installed_for_user() {
+    "$ADB" shell dumpsys package "$PACKAGE" 2>/dev/null | tr -d '\r' |
+        grep -qE "User $1:.*installed=true"
+}
+
+if ! installed_for_user "$CURRENT_USER"; then
+    OTHER_USERS="$("$ADB" shell dumpsys package "$PACKAGE" 2>/dev/null | tr -d '\r' |
+        grep -oE "User [0-9]+:.*installed=(true|false)" | sed 's/ ce.*installed=/ installed=/' || true)"
     die "the install did not take - $PACKAGE is not installed for user $CURRENT_USER.
   adb said: ${INSTALL_OUTPUT:-(nothing)}
 
   If that mentions INSTALL_FAILED_UPDATE_INCOMPATIBLE, an older copy signed with
   a different key is in the way:
     $ADB uninstall $PACKAGE
+
+  Per-user state on the device:
+${OTHER_USERS:-  (none reported - the package is not installed at all)}
 
   If it is installed for some other user, hand it to this one without
   re-pushing the APK:
