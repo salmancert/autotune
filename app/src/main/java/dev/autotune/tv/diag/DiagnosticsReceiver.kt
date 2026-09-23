@@ -99,6 +99,7 @@ class DiagnosticsReceiver : BroadcastReceiver() {
             appendLine("permissions   RECORD_AUDIO=${granted(context, Manifest.permission.RECORD_AUDIO)}")
             appendLine("              notificationAccess=${PlaybackMonitor(context).hasAccess()}")
             appendLine("              microphonePresent=${AnalysisSourceFactory.hasMicrophone(context)}")
+            appendLine("audio inputs  ${AnalysisSourceFactory.describeInputs(context)}")
             appendLine()
             if (audio != null) {
                 appendLine("volume        media=${audio.getStreamVolume(AudioManager.STREAM_MUSIC)}/${audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)}")
