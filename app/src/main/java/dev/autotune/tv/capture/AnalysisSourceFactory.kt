@@ -16,25 +16,38 @@ import dev.autotune.core.features.AnalysisFormat
  */
 object AnalysisSourceFactory {
 
+    /**
+     * [ruledOut] names sources that were tried and delivered nothing but
+     * silence. A source that opens successfully and then produces only zeroes
+     * is not hypothetical - playback capture does exactly that on TVs whose
+     * firmware does not really implement it - and without this the app would
+     * hold that dead source forever rather than trying the next one.
+     */
     fun create(
         context: Context,
         projection: MediaProjection?,
         allowMicrophone: Boolean,
         format: AnalysisFormat = AnalysisFormat.DEFAULT,
+        ruledOut: Set<SourceKind> = emptySet(),
     ): AnalysisSource? {
         if (!hasRecordPermission(context)) return null
 
         // 1. Exact, per-app capture - when the user has granted projection and
         //    the app being watched has not opted out.
-        if (projection != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (SourceKind.PLAYBACK_CAPTURE !in ruledOut &&
+            projection != null &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        ) {
             PlaybackCaptureSource.create(projection, format)?.let { return it }
         }
 
         // 2. The whole output mix, including DRM playback - privileged installs only.
-        OutputMixSource.create(format)?.let { return it }
+        if (SourceKind.OUTPUT_MIX !in ruledOut) {
+            OutputMixSource.create(format)?.let { return it }
+        }
 
-        // 3. The room, if the user opted in and the device has a microphone.
-        if (allowMicrophone && hasMicrophone(context)) {
+        // 3. The room, if the user opted in and a microphone is attached.
+        if (SourceKind.MICROPHONE !in ruledOut && allowMicrophone && hasMicrophone(context)) {
             MicrophoneSource.create(format)?.let { return it }
         }
 

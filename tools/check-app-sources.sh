@@ -68,8 +68,13 @@ done < <(grep 'error:' "$OUT/log" || true)
 
 # Anything that is not an unresolved reference is a structural problem: a syntax
 # error, a return in an expression body, a bad override.
+#
+# "ERROR CLASS" is Kotlin's marker for a type it could not resolve, so any
+# message carrying it is downstream of a missing android.* class rather than a
+# problem of its own - a lazy delegate on an AudioManager, say, reports as a
+# broken delegate here and compiles perfectly well against the real SDK.
 STRUCTURAL="$(grep 'error:' "$OUT/log" |
-    grep -viE "unresolved reference|overrides nothing|cannot infer type|not enough information|operator' modifier|argument type mismatch|cannot access 'val File.root|none of the following candidates|overload resolution ambiguity" |
+    grep -viE "unresolved reference|overrides nothing|cannot infer type|not enough information|operator' modifier|argument type mismatch|cannot access 'val File.root|none of the following candidates|overload resolution ambiguity|ERROR CLASS" |
     sed -E 's|^.*/autotune/||' | sort -u || true)"
 
 if [ -n "$STRUCTURAL" ]; then

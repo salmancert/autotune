@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.ServiceInfo
+import android.media.AudioManager
 import android.graphics.drawable.Icon
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
@@ -64,6 +65,10 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     private var analysing = false
 
     private var usingVolumeControl = false
+
+    /** Sources that opened but delivered only silence while audio was playing. */
+    private val ruledOutSources = mutableSetOf<SourceKind>()
+    private var silentSinceMs = 0L
 
     private val format = AnalysisFormat.DEFAULT
 
@@ -180,7 +185,14 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         if (!settings.enabled) return
 
         val allowMicrophone = settings.allowMicrophoneFallback && userInitiated
-        val created = AnalysisSourceFactory.create(this, projection, allowMicrophone, format)
+        val created = AnalysisSourceFactory.create(
+            context = this,
+            projection = projection,
+            allowMicrophone = allowMicrophone,
+            format = format,
+            ruledOut = ruledOutSources,
+        )
+        silentSinceMs = 0L
         source = created
         if (created == null) {
             Log.i(TAG, "no analysis source available; running the fixed preset")
@@ -240,6 +252,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 lastMeterLog = now
                 logMeter(active, state)
             }
+            if (rotateIfDeaf(active, state, now)) return
             if (now - lastNotificationUpdate >= NOTIFICATION_INTERVAL_MS) {
                 updateNotification()
                 monitor.refresh()
@@ -247,6 +260,38 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             }
         }
         handler?.post(::analysisLoop)
+    }
+
+    /**
+     * Gives up on a source that hears nothing while audio is demonstrably playing.
+     *
+     * A source that opens and then returns only zeroes looks healthy from every
+     * angle: the reads succeed, at the right rate, with the right buffer sizes.
+     * Only the content gives it away. Rather than hold it forever, rule it out
+     * and fall through to the next one - the output mix, then the microphone.
+     */
+    private fun rotateIfDeaf(source: AnalysisSource, state: StabilizerState, nowMs: Long): Boolean {
+        val playing = runCatching { audioManager?.isMusicActive == true }.getOrDefault(false)
+        if (!playing || state.hasSignal) {
+            silentSinceMs = 0L
+            return false
+        }
+        if (silentSinceMs == 0L) {
+            silentSinceMs = nowMs
+            return false
+        }
+        if (nowMs - silentSinceMs < DEAF_SOURCE_TIMEOUT_MS) return false
+
+        Log.w(
+            TAG,
+            "${source.label} has heard nothing for ${DEAF_SOURCE_TIMEOUT_MS / 1000}s while audio is " +
+                "playing; ruling it out and trying the next source",
+        )
+        ruledOutSources += source.kind
+        stopAnalysis()
+        publishStatus()
+        handler?.post { startAnalysis(userInitiated = false) }
+        return true
     }
 
     /**
@@ -519,6 +564,8 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         }
     }
 
+    private val audioManager: AudioManager? by lazy { getSystemService(AudioManager::class.java) }
+
     private val buffer = FloatArray(AnalysisFormat.DEFAULT.hopSize * 4)
     private var lastEffectUpdate = 0L
     private var lastStatusUpdate = 0L
@@ -531,6 +578,9 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         private const val NOTIFICATION_ID = 1001
 
         private const val RETRY_DELAY_MS = 5_000L
+
+        /** How long a source may hear nothing, while audio plays, before being abandoned. */
+        private const val DEAF_SOURCE_TIMEOUT_MS = 12_000L
         private const val STATUS_INTERVAL_MS = 100L
         private const val METER_LOG_INTERVAL_MS = 1_000L
         private const val METER_TAG = "AutotuneMeter"
