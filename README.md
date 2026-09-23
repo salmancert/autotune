@@ -88,17 +88,24 @@ When it is installed but seems to do nothing, this reports the whole state in
 one go rather than leaving you to guess which of half a dozen causes it is:
 
 ```bash
-adb shell am broadcast -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
+adb shell am broadcast -n dev.autotune.tv/.diag.DiagnosticsReceiver \
+    -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
 adb logcat -d -s AutotuneDiag
 
 # or, if logcat shows nothing - some TV firmware drops third-party output:
 adb shell cat /sdcard/Android/data/dev.autotune.tv/files/diagnostics.txt
 ```
 
-`--include-stopped-packages` matters: Android drops broadcasts to an app in the
-stopped state, which is where an app sits after `adb install` until it is
-launched once. Without the flag you get silence, which looks exactly like the
-app not being installed.
+Both parts of that command are load-bearing, and each covers a restriction that
+fails silently: the broadcast still says "completed" and prints nothing, which
+looks exactly like the receiver not existing.
+
+- **`-n <component>`** makes the broadcast explicit. Since Android 8 the system
+  will not deliver an implicit broadcast to a manifest-declared receiver in a
+  background app; it says so only as `BroadcastQueue: Background execution not
+  allowed` in the full log, which nobody is filtering for.
+- **`--include-stopped-packages`** reaches an app that has never been launched,
+  which is where every app sits after `adb install`.
 
 It prints the running state, which analysis source and output stage attached,
 permissions, the media volume and whether the device calls it fixed, the live

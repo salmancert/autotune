@@ -19,14 +19,20 @@ import java.util.Locale
 /**
  * Dumps everything needed to tell why the app is not doing what was expected:
  *
- *     adb shell am broadcast -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
+ *     adb shell am broadcast -n dev.autotune.tv/.diag.DiagnosticsReceiver \
+ *         -a dev.autotune.tv.DIAGNOSE --include-stopped-packages
  *     adb logcat -d -s AutotuneDiag
  *
- * `--include-stopped-packages` is not optional. Android drops broadcasts to an
- * app in the stopped state, which is where every app sits after `adb install`
- * until something launches it - so without the flag the one case this is most
- * needed for, "it is installed and has never run", reports nothing at all and
- * looks identical to the app not being installed.
+ * Both parts of that command are load-bearing, and each covers a restriction
+ * that fails silently - the broadcast still reports "completed" and produces no
+ * output, which looks exactly like the receiver not existing:
+ *
+ *  - `-n <component>` makes the broadcast explicit. Since Android 8 the system
+ *    refuses to deliver an implicit broadcast to a manifest-declared receiver in
+ *    a background app, and logs only `BroadcastQueue: Background execution not
+ *    allowed` where nobody is looking.
+ *  - `--include-stopped-packages` reaches an app that has never been launched,
+ *    which is where every app sits after `adb install`.
  *
  * "I can't hear a difference" has half a dozen causes that look identical from
  * the sofa - capture never granted, the effect refusing to attach, the TV
