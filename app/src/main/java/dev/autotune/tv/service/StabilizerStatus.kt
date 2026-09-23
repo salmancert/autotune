@@ -13,6 +13,13 @@ data class StabilizerStatus(
     val processorLabel: String? = null,
     val playingPackage: String? = null,
     val bypassed: Boolean = false,
+
+    /** When capture last started, so "has it ever heard anything" is answerable. */
+    val captureStartedAtMs: Long = 0L,
+
+    /** Last moment the engine saw audio above the noise floor. */
+    val lastSignalAtMs: Long = 0L,
+
     val state: StabilizerState = StabilizerState(),
 ) {
     /** True when the engine is adapting rather than sitting on the fixed preset. */
@@ -34,7 +41,11 @@ object StabilizerStatusBus {
     }
 
     fun publishState(state: StabilizerState) {
-        mutable.value = mutable.value.copy(state = state)
+        val current = mutable.value
+        mutable.value = current.copy(
+            state = state,
+            lastSignalAtMs = if (state.hasSignal) System.currentTimeMillis() else current.lastSignalAtMs,
+        )
     }
 
     fun clear() {

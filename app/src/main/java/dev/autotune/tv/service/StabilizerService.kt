@@ -480,6 +480,13 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                 sourceLabel = active?.label,
                 processorLabel = processor?.label,
                 playingPackage = monitor.currentPackage,
+                captureStartedAtMs = if (active != null && it.captureStartedAtMs == 0L) {
+                    System.currentTimeMillis()
+                } else if (active == null) {
+                    0L
+                } else {
+                    it.captureStartedAtMs
+                },
             )
         }
     }
