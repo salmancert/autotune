@@ -215,10 +215,16 @@ useful. This is the single most important thing to understand before installing.
 >
 > Run `TEST_TONE` (see [Diagnosing it on the TV](#diagnosing-it-on-the-tv)) to
 > check your device. If the tone is audible but never reaches the meter, the
-> adaptive path is unavailable on that hardware and a **USB microphone** is the
-> only way to analyse anything — it sits downstream of capture opt-outs, DRM,
-> tuners and HDMI inputs alike. The output side still works: the effect chain
+> capture path is unavailable on that hardware and **a microphone is the only way
+> to analyse anything** — it sits downstream of capture opt-outs, DRM, tuners and
+> HDMI inputs alike. The output side still works regardless: the effect chain
 > attaches to the mixer and the fixed dialogue preset applies.
+>
+> That microphone does not have to be a USB one. A TV with hands-free voice
+> control has a far-field array that Android exposes as `TYPE_BUILTIN_MIC`, and
+> Autotune will use it — turn on **Use microphone as fallback**, grant
+> `RECORD_AUDIO`, and check the set's physical microphone switch is not muted.
+> The `audio inputs` line in the diagnostics says what the platform can see.
 
 **Output** — how the correction is applied:
 
@@ -251,6 +257,27 @@ loud low-frequency content down and the presence band keeps consonants up. That 
 static rather than adaptive — good, not as good. To get the adaptive path on those
 apps you need either a device with a microphone (enable the fallback in settings) or
 a privileged install.
+
+### Recording from a TV's own microphone
+
+A far-field array is tuned for the opposite of what this app wants. Its job is
+to hear a person talking *over* the television, so the stream the assistant gets
+has been beamformed, noise-suppressed, gain-controlled and echo-cancelled
+against the TV's own output — and that last one is designed to remove precisely
+the signal Autotune is trying to measure. Automatic gain control is nearly as
+bad: it flattens the loudness differences that are the whole point.
+
+So `MicrophoneSource` asks for `UNPROCESSED` first, then `CAMCORDER`, and only
+falls back to `MIC`; `VOICE_RECOGNITION` and `VOICE_COMMUNICATION` are never
+asked for, because echo cancellation is the point of both. Because a device may
+ignore the request and hand back a processed stream anyway, it then explicitly
+disables `AutomaticGainControl`, `NoiseSuppressor` and `AcousticEchoCanceler` on
+the record's own session. The analysis line reports which source opened —
+`room microphone (unprocessed)` is the good case.
+
+If the built-in array still hears nothing, a USB microphone bypasses the vendor
+processing entirely and is the fallback of last resort.
+
 
 ## Install
 

@@ -68,6 +68,21 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
 
     /** Sources that opened but delivered only silence while audio was playing. */
     private val ruledOutSources = mutableSetOf<SourceKind>()
+
+    /**
+     * Whether this service may still open the microphone.
+     *
+     * Android only lets a foreground service claim the `microphone` type when
+     * the user put it in the foreground, so the first start has to come from
+     * the app. That permission does not expire when the analysis loop restarts:
+     * once the service is foreground with the type held, rotating from a dead
+     * playback capture to the microphone happens inside the same service.
+     * Keying that rotation off the *current* start's `userInitiated` flag - as
+     * this did - meant the fall-through to the microphone could never fire,
+     * because every automatic restart passes false. Latching it here keeps the
+     * Android rule (the user opened us) without losing the rotation.
+     */
+    private var microphoneEligible = false
     private var silentSinceMs = 0L
 
     private val format = AnalysisFormat.DEFAULT
@@ -75,7 +90,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
             Log.i(TAG, "media projection revoked")
-            handler?.post { stopAnalysis(); startAnalysis(userInitiated = false) }
+            handler?.post { stopAnalysis(); startAnalysis() }
         }
     }
 
@@ -131,6 +146,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
     // ------------------------------------------------------------- lifecycle
 
     private fun ensureRunning(userInitiated: Boolean) {
+        if (userInitiated) microphoneEligible = true
         if (worker == null) {
             // Audio analysis gets its own thread at audio priority: a dropped
             // block here would be heard as a late duck.
@@ -141,7 +157,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         }
         handler?.post {
             attachProcessor()
-            startAnalysis(userInitiated)
+            startAnalysis()
             startMonitoring()
             publishStatus()
             updateNotification()
@@ -180,11 +196,11 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         created?.applyStaticPreset(settings.toConfig())
     }
 
-    private fun startAnalysis(userInitiated: Boolean) {
+    private fun startAnalysis() {
         if (analysing) return
         if (!settings.enabled) return
 
-        val allowMicrophone = settings.allowMicrophoneFallback && userInitiated
+        val allowMicrophone = settings.allowMicrophoneFallback && microphoneEligible
         val created = AnalysisSourceFactory.create(
             context = this,
             projection = projection,
@@ -231,7 +247,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
             updateNotification()
             // Something took the source away (a projection revoked, the mic
             // grabbed by another app). Try again shortly rather than giving up.
-            handler?.postDelayed({ startAnalysis(userInitiated = false) }, RETRY_DELAY_MS)
+            handler?.postDelayed({ startAnalysis() }, RETRY_DELAY_MS)
             return
         }
 
@@ -290,7 +306,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         ruledOutSources += source.kind
         stopAnalysis()
         publishStatus()
-        handler?.post { startAnalysis(userInitiated = false) }
+        handler?.post { startAnalysis() }
         return true
     }
 
@@ -398,7 +414,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         handler?.post {
             // Restart analysis so the better source is picked up immediately.
             stopAnalysis()
-            startAnalysis(userInitiated = true)
+            startAnalysis()
             publishStatus()
             updateNotification()
         }
@@ -556,7 +572,7 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
                     processor = null
                 }
                 attachProcessor()
-                if (!analysing) startAnalysis(userInitiated = false)
+                if (!analysing) startAnalysis()
                 if (source == null) processor?.applyStaticPreset(config)
             }
             publishStatus()

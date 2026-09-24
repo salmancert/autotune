@@ -129,12 +129,17 @@ class DiagnosticsReceiver : BroadcastReceiver() {
                 )
             }
             appendLine()
-            append(verdict(status, audio))
+            append(verdict(context, settings, status, audio))
         }
     }
 
     /** The one sentence worth reading first. */
-    private fun verdict(status: dev.autotune.tv.service.StabilizerStatus, audio: AudioManager?): String {
+    private fun verdict(
+        context: Context,
+        settings: SettingsRepository,
+        status: dev.autotune.tv.service.StabilizerStatus,
+        audio: AudioManager?,
+    ): String {
         val running = status.running
         val source = status.sourceLabel
         val processor = status.processorLabel
@@ -160,7 +165,8 @@ class DiagnosticsReceiver : BroadcastReceiver() {
                     "through to a soundbar or receiver. Effects on the output mix will not be audible."
             source == null ->
                 "VERDICT  Running the fixed preset only - no analysis. Press 'Grant audio capture' " +
-                    "(needed again after every restart). Netflix and Prime Video can never be analysed."
+                    "(needed again after every restart). Netflix and Prime Video can never be analysed." +
+                    microphoneAdvice(context, settings)
             capturingNothing ->
                 "VERDICT  Capture is attached but has read nothing but silence while the system says " +
                     "audio is playing. Three things cause that and they look identical: the app being " +
@@ -173,13 +179,45 @@ class DiagnosticsReceiver : BroadcastReceiver() {
                     "  adb shell am broadcast -n dev.autotune.tv/.diag.DiagnosticsReceiver " +
                     "-a dev.autotune.tv.TEST_TONE\n" +
                     "  Tone heard but not metered = this device cannot capture; nothing here will fix " +
-                    "that, and only a microphone can analyse anything on it."
+                    "that, and only a microphone can analyse anything on it." + microphoneAdvice(context, settings)
             !status.state.hasSignal ->
                 "VERDICT  Set up correctly, but nothing is playing right now. Start something and run " +
                     "this again."
             else ->
                 "VERDICT  Fully working. If you still hear no difference, the audio is likely leaving " +
                     "the TV untouched over HDMI - try 'Adjust the TV volume directly'."
+        }
+    }
+
+    /**
+     * What to do about the microphone, given what this device actually has.
+     *
+     * Appended to a verdict that has just concluded nothing can be captured.
+     * A TV with hands-free voice control has a microphone array Android can
+     * open like any other, so the advice is only "buy a USB one" when the
+     * platform reports no input at all - and when there is one, the thing
+     * standing in the way is usually a setting that is off by default.
+     */
+    private fun microphoneAdvice(context: Context, settings: SettingsRepository): String {
+        val present = AnalysisSourceFactory.hasMicrophone(context)
+        val permitted = AnalysisSourceFactory.hasRecordPermission(context)
+        val enabled = settings.allowMicrophoneFallback
+        return when {
+            present && enabled && permitted ->
+                "\n  A microphone is present and enabled, so Autotune will fall back to it on its " +
+                    "own about 12 seconds after capture goes quiet. Look for 'room microphone' on " +
+                    "the analysis line above."
+            present && !enabled ->
+                "\n  This device does have a microphone (${AnalysisSourceFactory.describeInputs(context)}). " +
+                    "Turn on 'Use microphone as fallback' in Autotune and reopen the app once - the " +
+                    "microphone hears the speakers, so it works for DRM apps, live TV and HDMI alike. " +
+                    "Check the TV's physical microphone switch is not muted."
+            present && !permitted ->
+                "\n  A microphone is present but Autotune has no RECORD_AUDIO permission. Open the " +
+                    "app and press 'Grant audio capture'."
+            else ->
+                "\n  No audio input is attached (${AnalysisSourceFactory.describeInputs(context)}), so " +
+                    "a USB microphone is the only remaining route to analysing anything."
         }
     }
 
