@@ -410,6 +410,15 @@ class StabilizerService : Service(), SharedPreferences.OnSharedPreferenceChangeL
         // Android 14 requires a callback to be registered before capture starts.
         granted.registerCallback(projectionCallback, Handler(mainLooper))
         projection = granted
+        // A fresh grant is a fresh chance. Whatever made the last capture deaf -
+        // a projection that had quietly expired, a player started before the
+        // record, an app that was opted out and is no longer the one playing -
+        // was a property of that capture, not of the device, and the evidence is
+        // that a TV which reads silence in one session reads audio in the next.
+        // Without this the ruling-out is permanent for the life of the service,
+        // so pressing "Grant audio capture" again could never help and the only
+        // cure would be force-stopping the app.
+        ruledOutSources -= SourceKind.PLAYBACK_CAPTURE
         ensureRunning(userInitiated = true)
         handler?.post {
             // Restart analysis so the better source is picked up immediately.

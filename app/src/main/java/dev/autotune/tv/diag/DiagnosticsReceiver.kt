@@ -169,17 +169,20 @@ class DiagnosticsReceiver : BroadcastReceiver() {
                     microphoneAdvice(context, settings)
             capturingNothing ->
                 "VERDICT  Capture is attached but has read nothing but silence while the system says " +
-                    "audio is playing. Three things cause that and they look identical: the app being " +
-                    "played opts out (Netflix, Prime Video and Disney+ do, and an opted-out stream " +
-                    "arrives as silence rather than an error), the sound never enters Android's audio " +
-                    "at all (live TV through the tuner, or an HDMI input), or this device's firmware " +
-                    "does not really implement playback capture - some TVs accept the AudioRecord and " +
-                    "then feed it nothing. To tell them apart, play this app's own tone, which is " +
-                    "always capturable if capture works at all:\n" +
+                    "audio is playing. Try this first: press 'Grant audio capture' again, then start " +
+                    "playback. The grant does not survive a restart, and a token that has expired " +
+                    "gives silence rather than an error - the same TV can read nothing in one session " +
+                    "and capture perfectly in the next.\n" +
+                    "  If a fresh grant does not fix it, the other causes look identical from here: " +
+                    "the app being played opts out (Netflix, Prime Video and Disney+ do, and an " +
+                    "opted-out stream arrives as silence), the sound never enters Android's audio at " +
+                    "all (live TV through the tuner, or an HDMI input), or the firmware accepts the " +
+                    "AudioRecord and feeds it nothing. To tell them apart, play this app's own tone, " +
+                    "which is always capturable if capture works at all:\n" +
                     "  adb shell am broadcast -n dev.autotune.tv/.diag.DiagnosticsReceiver " +
                     "-a dev.autotune.tv.TEST_TONE\n" +
-                    "  Tone heard but not metered = this device cannot capture; nothing here will fix " +
-                    "that, and only a microphone can analyse anything on it." + microphoneAdvice(context, settings)
+                    "  Tone heard but not metered, after a fresh grant = capture is not usable here " +
+                    "and only a microphone can analyse anything." + microphoneAdvice(context, settings)
             !status.state.hasSignal ->
                 "VERDICT  Set up correctly, but nothing is playing right now. Start something and run " +
                     "this again."

@@ -205,20 +205,33 @@ useful. This is the single most important thing to understand before installing.
 | **Microphone** | The room | `RECORD_AUDIO`, a device with a mic | Anything, at the cost of room acoustics |
 | *(none)* | — | — | Fixed dialogue preset, still running |
 
-> **Some TVs cannot do playback capture at all.** The API attaches, `AudioRecord`
-> initialises, reads succeed at the right rate — and every sample is zero.
-> Confirmed on a TCL C735 (Android 11): silent for a DRM app that *permits*
-> capture, silent for a plain YouTube stream, and silent for the app's own test
-> tone, with audio confirmed flowing through a normal `MIXER` output thread and a
-> current WebView. Nothing in the API reports this; it is indistinguishable from
-> quiet content until you play a tone you know is capturable.
+> **Playback capture can go silent without reporting anything.** The API
+> attaches, `AudioRecord` initialises, reads succeed at the right rate — and
+> every sample is zero. Observed on a TCL C735 (Android 11) across a whole
+> session: silent for a DRM app that *permits* capture, silent for a plain
+> YouTube stream, and silent for the app's own test tone, with audio confirmed
+> flowing through a normal `MIXER` output thread and a current WebView.
+>
+> **It is not a permanent property of the device.** The same TV captures YouTube
+> correctly in a later session, with sensible loudness and a clean speech/music
+> split. So a silent capture means *this* capture is dead, not that the hardware
+> cannot do it. The likeliest causes are a MediaProjection that has quietly
+> expired — the grant does not survive a restart, and a stale token yields
+> silence rather than an error — or a player that was already running when the
+> record started.
+>
+> If the meter sits at `-100.0 LUFS` while something is playing: press **Grant
+> audio capture** again, then start playback. Autotune also rules out a source
+> that has heard nothing for twelve seconds and moves to the next one, and a
+> fresh grant puts playback capture back in the running.
 >
 > Run `TEST_TONE` (see [Diagnosing it on the TV](#diagnosing-it-on-the-tv)) to
-> check your device. If the tone is audible but never reaches the meter, the
-> capture path is unavailable on that hardware and **a microphone is the only way
-> to analyse anything** — it sits downstream of capture opt-outs, DRM, tuners and
-> HDMI inputs alike. The output side still works regardless: the effect chain
-> attaches to the mixer and the fixed dialogue preset applies.
+> separate a dead capture from an app that opts out: the tone is Autotune's own
+> `USAGE_MEDIA` stream, so it is always capturable when capture works at all.
+> If even a fresh grant cannot hear the tone, **a microphone is the way in** —
+> it sits downstream of capture opt-outs, DRM, tuners and HDMI inputs alike.
+> The output side works regardless: the effect chain attaches to the mixer and
+> the fixed dialogue preset applies.
 >
 > That microphone does not have to be a USB one. A TV with hands-free voice
 > control has a far-field array that Android exposes as `TYPE_BUILTIN_MIC`, and
