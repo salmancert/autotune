@@ -205,6 +205,21 @@ useful. This is the single most important thing to understand before installing.
 | **Microphone** | The room | `RECORD_AUDIO`, a device with a mic | Anything, at the cost of room acoustics |
 | *(none)* | — | — | Fixed dialogue preset, still running |
 
+> **Some TVs cannot do playback capture at all.** The API attaches, `AudioRecord`
+> initialises, reads succeed at the right rate — and every sample is zero.
+> Confirmed on a TCL C735 (Android 11): silent for a DRM app that *permits*
+> capture, silent for a plain YouTube stream, and silent for the app's own test
+> tone, with audio confirmed flowing through a normal `MIXER` output thread and a
+> current WebView. Nothing in the API reports this; it is indistinguishable from
+> quiet content until you play a tone you know is capturable.
+>
+> Run `TEST_TONE` (see [Diagnosing it on the TV](#diagnosing-it-on-the-tv)) to
+> check your device. If the tone is audible but never reaches the meter, the
+> adaptive path is unavailable on that hardware and a **USB microphone** is the
+> only way to analyse anything — it sits downstream of capture opt-outs, DRM,
+> tuners and HDMI inputs alike. The output side still works: the effect chain
+> attaches to the mixer and the fixed dialogue preset applies.
+
 **Output** — how the correction is applied:
 
 | Output stage | Quality | Fails when |

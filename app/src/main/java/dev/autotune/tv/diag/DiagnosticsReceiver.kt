@@ -163,11 +163,17 @@ class DiagnosticsReceiver : BroadcastReceiver() {
                     "(needed again after every restart). Netflix and Prime Video can never be analysed."
             capturingNothing ->
                 "VERDICT  Capture is attached but has read nothing but silence while the system says " +
-                    "audio is playing. Either the app being played opts out of capture (Netflix, Prime " +
-                    "Video and Disney+ all do, and an opted-out stream arrives as silence rather than an " +
-                    "error), or the sound is not coming from an Android app at all - live TV through the " +
-                    "tuner and anything on an HDMI input bypass Android's audio entirely, and neither " +
-                    "capture nor the effect can reach them. Test with YouTube."
+                    "audio is playing. Three things cause that and they look identical: the app being " +
+                    "played opts out (Netflix, Prime Video and Disney+ do, and an opted-out stream " +
+                    "arrives as silence rather than an error), the sound never enters Android's audio " +
+                    "at all (live TV through the tuner, or an HDMI input), or this device's firmware " +
+                    "does not really implement playback capture - some TVs accept the AudioRecord and " +
+                    "then feed it nothing. To tell them apart, play this app's own tone, which is " +
+                    "always capturable if capture works at all:\n" +
+                    "  adb shell am broadcast -n dev.autotune.tv/.diag.DiagnosticsReceiver " +
+                    "-a dev.autotune.tv.TEST_TONE\n" +
+                    "  Tone heard but not metered = this device cannot capture; nothing here will fix " +
+                    "that, and only a microphone can analyse anything on it."
             !status.state.hasSignal ->
                 "VERDICT  Set up correctly, but nothing is playing right now. Start something and run " +
                     "this again."
