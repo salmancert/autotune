@@ -50,8 +50,20 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # `packages: ''` is load-bearing. The action's default is
+      # `tools platform-tools`, and Google has withdrawn the legacy `tools`
+      # package from the SDK repository, so the default now fails on every
+      # runner with "Failed to find package 'tools'" - taking the APK with it.
+      # Nothing here needs it: the runner image ships platform-tools, and AGP
+      # fetches the platform and build-tools it wants once licences are
+      # accepted, which this action does.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install the compile SDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -59,10 +71,11 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug
 
-      # Uploaded before lint runs, and on failure too: a lint warning should
-      # never be the reason there is no APK to install.
+      # Uploaded before lint runs, so a lint warning is never the reason there
+      # is no APK to install. Not `if: always()`: when an earlier step fails
+      # there is no APK, and demanding one then reports a second failure that
+      # hides the first.
       - name: Upload APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: autotune-debug-apk
