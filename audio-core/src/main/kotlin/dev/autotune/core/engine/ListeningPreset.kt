@@ -23,7 +23,9 @@ enum class ListeningPreset(
         configure = {
             it.copy(
                 musicCeilingOffsetDb = 5f,
-                maxBoostDb = 12f,
+                // The widest native range of anything on a television, so this
+                // is the preset that most needs room to lift a whispered line.
+                maxBoostDb = 14f,
                 compressionRatio = 4.5f,
                 dialogueClarityDb = 3f,
             )
@@ -73,8 +75,10 @@ enum class ListeningPreset(
                 maxBoostDb = 8f,
                 compressionRatio = 3f,
                 dialogueClarityDb = 4f,
-                // Stings between items are short; do not chase them.
-                duckAttackMs = 80f,
+                // Stings between items are short; do not chase them. This has to
+                // stay slower than the base attack, or "do not chase" becomes
+                // "chase harder than usual".
+                duckAttackMs = 160f,
             )
         },
     ),

@@ -126,7 +126,7 @@ thing, and the genres genuinely differ:
 
 | Preset | For | What changes |
 |---|---|---|
-| **Films & drama** | Wide cinematic mixes | Music held 5 dB under dialogue, up to 12 dB of lift |
+| **Films & drama** | Wide cinematic mixes | Music held 5 dB under dialogue, up to 14 dB of lift |
 | **Sport** | Commentary over a crowd | Crowd ducked less (it is atmosphere), faster recovery, harder on ad breaks |
 | **Late night** | Not waking the house | Music 8 dB under, nothing above target, up to 15 dB of lift |
 | **News & talk** | Already-levelled broadcast | A light touch, consonants pushed forward |
@@ -442,7 +442,17 @@ adb reboot
 
 Everything is on the main screen; left/right on the remote adjusts a value.
 
-- **Dialogue level** (default −20 LUFS) — where speech should sit. *If dialogue is
+> **Why the dialogue target is −17 LUFS and not −20.** Broadcast normalises to
+> −23, cinema lower still, and those are the numbers you reach for first. But a
+> TV app is fed by streaming, which normalises nearer −14, and measurement on
+> real YouTube playback put dialogue at −16 to −17 LUFS. Aiming at −20 there
+> meant a standing 3 dB cut on perfectly comfortable speech — which the viewer
+> undoes with the volume control, so nothing is gained and the correction
+> arrives at the loud cue with its headroom already spent. At −17 ordinary
+> dialogue comes out at roughly unity and the stabiliser spends its authority
+> on the deviations instead of on the baseline.
+
+- **Dialogue level** (default −17 LUFS) — where speech should sit. *If dialogue is
   still too quiet, raise this first.*
 - **Keep music below dialogue by** (default 4 dB) — how far under dialogue loud
   music is held. Raise it if music still feels overbearing; lower it if the score

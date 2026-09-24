@@ -61,8 +61,10 @@ class StabilizerEngineTest {
         val engine = speechEngine()
         val state = engine.feed(seconds = 5.0, dbfs = -32.0)
         assertTrue("gain ${state.gainDb}", state.gainDb > 8f)
-        // Corrected loudness should be close to the -20 LUFS target.
-        assertEquals(-20.0, (state.momentaryLufs + state.gainDb).toDouble(), 2.5)
+        // Corrected loudness should land on the dialogue target, whatever it is
+        // tuned to. Asserting the number itself would only restate the default.
+        val target = StabilizerConfig().targetDialogueLufs.toDouble()
+        assertEquals(target, (state.momentaryLufs + state.gainDb).toDouble(), 2.5)
     }
 
     @Test
@@ -91,6 +93,52 @@ class StabilizerEngineTest {
 
         val later = engine.process(TestSignals.silence(sampleRate * 3))
         assertEquals(settled.gainDb.toDouble(), later.gainDb.toDouble(), 1e-6)
+    }
+
+    /**
+     * The level, in dBFS, at which this test's tone measures [lufs].
+     *
+     * Loudness is not amplitude: K-weighting and the -0.691 offset put a sine
+     * some way from its RMS level, and the gap depends on frequency. Measuring
+     * it once and working from there keeps these tests about the control law
+     * rather than about the meter.
+     */
+    private fun dbfsFor(lufs: Float): Double {
+        val probe = StabilizerEngine(StabilizerConfig(enabled = false), format, FixedClassifier(1f, 0f, 0f))
+        val reference = -20.0
+        val measured = probe.feed(seconds = 2.0, dbfs = reference).momentaryLufs
+        return reference + (lufs - measured)
+    }
+
+    @Test
+    fun `dialogue that is already comfortable is not quietly turned down`() {
+        // The failure this pins down was found on a television, not here: with
+        // the target set for cinema, ordinary streaming dialogue sat above it
+        // and every correction was a cut. The viewer answers that with the
+        // volume control, so the stabiliser achieves nothing and arrives at the
+        // loud moment with its headroom already spent.
+        val config = StabilizerConfig()
+        val engine = speechEngine(config)
+        val state = engine.feed(seconds = 6.0, dbfs = dbfsFor(config.targetDialogueLufs))
+        assertTrue("standing gain on comfortable dialogue was ${state.gainDb} dB", abs(state.gainDb) < 1.5f)
+    }
+
+    @Test
+    fun `a duck is spread over several hops rather than landing in one`() {
+        // A gain step inside a single 32 ms hop is heard as a lurch, and is the
+        // difference between a stabiliser you forget about and one you notice.
+        val engine = musicEngine()
+        engine.feed(seconds = 2.0, dbfs = -30.0)
+
+        val hopSeconds = format.hopSize.toDouble() / sampleRate
+        val afterOneHop = engine.feed(seconds = hopSeconds, dbfs = -8.0)
+        assertTrue(
+            "the whole duck landed in one hop: ${afterOneHop.gainDb} dB",
+            afterOneHop.gainDb > -6f,
+        )
+
+        val settled = engine.feed(seconds = 0.4, dbfs = -8.0)
+        assertTrue("the duck never arrived: ${settled.gainDb} dB", settled.gainDb < -8f)
     }
 
     @Test

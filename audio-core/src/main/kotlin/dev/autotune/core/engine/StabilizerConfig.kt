@@ -3,15 +3,29 @@ package dev.autotune.core.engine
 /**
  * Everything the user (or a per-app profile) can tune.
  *
- * Levels are LUFS, the loudness unit broadcasters use; -20 LUFS is roughly the
- * level a streaming service aims for, and it is where dialogue is comfortable
- * on a TV at a normal volume setting.
+ * Levels are LUFS, the loudness unit broadcasters use. The defaults are chosen
+ * so that ordinary television content needs almost no correction and the
+ * stabiliser spends its authority on the things that actually hurt: a cue that
+ * jumps, a line that drops, an advert that will not let up.
+ *
+ * That is a deliberate change from the obvious choice. Broadcast normalises to
+ * -23 or -24 LUFS and cinema lower still, but a TV app is fed from streaming,
+ * which normalises nearer -14, and measurement on real YouTube playback put
+ * dialogue at -16 to -17 LUFS. Aiming at -20 there meant a standing 3 dB cut on
+ * everything, which the viewer simply undoes with the volume control - so the
+ * correction achieved nothing except spending its headroom before the loud
+ * moment arrived.
  */
 data class StabilizerConfig(
     val enabled: Boolean = true,
 
-    /** Where dialogue should sit. Raise it if you still find speech quiet. */
-    val targetDialogueLufs: Float = -20f,
+    /**
+     * Where dialogue should sit. Raise it if you still find speech quiet.
+     *
+     * Near enough to typical streaming dialogue that ordinary speech comes out
+     * at roughly unity gain, so the volume control keeps meaning what it meant.
+     */
+    val targetDialogueLufs: Float = -17f,
 
     /** How far below the dialogue target sustained music is allowed to sit. */
     val musicCeilingOffsetDb: Float = 4f,
@@ -23,19 +37,42 @@ data class StabilizerConfig(
      */
     val maxAboveTargetDb: Float = 2f,
 
-    /** Most the stabiliser will lift quiet dialogue. */
+    /**
+     * Most the stabiliser will lift quiet dialogue.
+     *
+     * Raising the dialogue target already asks more of this: every input needs
+     * three more dB of lift to reach the new target than it did to reach the
+     * old one. Trimming the ceiling at the same time would have shortened the
+     * reach on exactly the mumbled line this app exists to rescue, which a test
+     * caught by landing quiet dialogue 3 dB short of where it was asked to be.
+     */
     val maxBoostDb: Float = 12f,
 
-    /** Most the stabiliser will pull down a loud passage. */
-    val maxCutDb: Float = 15f,
+    /**
+     * Most the stabiliser will pull down a loud passage.
+     *
+     * Enough to bring any real cue back under control, and not so much that the
+     * score disappears out from under the picture - which is its own kind of
+     * uncomfortable, because it makes the processing the thing you notice.
+     */
+    val maxCutDb: Float = 12f,
 
     /** Dialogue levelling ballistics: deliberately slow, so speech is not pumped. */
     val dialogueAttackMs: Float = 400f,
-    val dialogueReleaseMs: Float = 900f,
+    val dialogueReleaseMs: Float = 1200f,
 
-    /** Ducking ballistics: fast enough to catch a cut to loud music. */
-    val duckAttackMs: Float = 40f,
-    val duckReleaseMs: Float = 1200f,
+    /**
+     * Ducking ballistics.
+     *
+     * The attack is not as fast as it could be, on purpose. An analysis hop is
+     * 32 ms, so a 40 ms attack put the whole duck into a single step - audible
+     * as a lurch, and close to a click. The ear integrates loudness over about
+     * 200 ms, so a duck that completes in roughly 90 ms is still perceptually
+     * immediate while being spread over three hops. The release is long because
+     * a gain that returns quickly is heard as breathing.
+     */
+    val duckAttackMs: Float = 90f,
+    val duckReleaseMs: Float = 1600f,
 
     /** Below this the input is silence or room tone; hold the gain instead of amplifying hiss. */
     val noiseFloorLufs: Float = -55f,

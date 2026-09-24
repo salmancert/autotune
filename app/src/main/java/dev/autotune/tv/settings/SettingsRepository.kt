@@ -37,7 +37,7 @@ class SettingsRepository(context: Context) {
         set(value) = preferences.edit { putFloat(KEY_STRENGTH, value.coerceIn(0f, 1f)) }
 
     var targetDialogueLufs: Float
-        get() = preferences.getFloat(KEY_DIALOGUE_TARGET, -20f)
+        get() = preferences.getFloat(KEY_DIALOGUE_TARGET, -17f)
         set(value) = preferences.edit { putFloat(KEY_DIALOGUE_TARGET, value.coerceIn(-30f, -12f)) }
 
     var musicCeilingOffsetDb: Float
